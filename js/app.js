@@ -3,8 +3,22 @@ const ASSET_PATH = "./assets/mvp_core_assets.json";
 const state = {
   assets: null,
   datasetId: "abz_curated",
+  formId: "all",
   familyId: "base_pair",
   parameterId: "shear",
+};
+
+const FORM_OPTIONS = [
+  { form_id: "all", display_name: "All" },
+  { form_id: "adna", display_name: "A-DNA" },
+  { form_id: "bdna", display_name: "B-DNA" },
+  { form_id: "zdna", display_name: "Z-DNA" },
+];
+
+const FORM_META = {
+  adna: { label: "A-DNA", color: "#8c3b2a" },
+  bdna: { label: "B-DNA", color: "#174a7e" },
+  zdna: { label: "Z-DNA", color: "#146c43" },
 };
 
 function el(id) {
@@ -76,6 +90,8 @@ function syncSelectors() {
   }));
   fillSelect(el("datasetSelect"), datasetItems, "dataset_id", "display_name", state.datasetId);
 
+  fillSelect(el("formSelect"), FORM_OPTIONS, "form_id", "display_name", state.formId);
+
   const families = Object.entries(currentPlotDataset().families).map(([id, family]) => ({
     family_id: id,
     display_name: family.display_name,
@@ -107,8 +123,14 @@ function makeTrace(values, label, color) {
   };
 }
 
+function selectedFormIds() {
+  return state.formId === "all" ? ["adna", "bdna", "zdna"] : [state.formId];
+}
+
 function renderStats() {
   const param = currentParam();
+  el("currentForm").textContent =
+    FORM_OPTIONS.find((item) => item.form_id === state.formId)?.display_name ?? "-";
   el("countA").textContent = param.forms.adna.length.toLocaleString();
   el("countB").textContent = param.forms.bdna.length.toLocaleString();
   el("countZ").textContent = param.forms.zdna.length.toLocaleString();
@@ -117,19 +139,21 @@ function renderStats() {
 
 function renderPlot() {
   const param = currentParam();
-  const traces = [
-    makeTrace(param.forms.adna, "A-DNA", "#8c3b2a"),
-    makeTrace(param.forms.bdna, "B-DNA", "#174a7e"),
-    makeTrace(param.forms.zdna, "Z-DNA", "#146c43"),
-  ];
+  const traces = selectedFormIds().map((formId) =>
+    makeTrace(param.forms[formId], FORM_META[formId].label, FORM_META[formId].color)
+  );
 
   const unit = param.unit === "A" ? "Å" : param.unit;
   const titleUnit = unit ? ` (${unit})` : "";
+  const titlePrefix =
+    state.formId === "all"
+      ? "All forms"
+      : FORM_OPTIONS.find((item) => item.form_id === state.formId)?.display_name ?? "Selection";
   Plotly.newPlot(
     el("plot"),
     traces,
     {
-      title: `${param.display_name}${titleUnit}`,
+      title: `${titlePrefix}: ${param.display_name}${titleUnit}`,
       barmode: "overlay",
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
@@ -153,7 +177,7 @@ function renderAll() {
   renderStats();
   renderPlot();
   el("statusNote").textContent =
-    "MVP loaded: curated ABZ overlay for 18 core parameters. Dataset cards already include broader pure-DNA layers and future ABZ profiles.";
+    "MVP loaded: curated ABZ explorer for 18 core parameters, with explicit form selection for A-DNA, B-DNA, Z-DNA, or All.";
 }
 
 async function bootstrap() {
@@ -168,6 +192,10 @@ async function bootstrap() {
 
   el("datasetSelect").addEventListener("change", (event) => {
     state.datasetId = event.target.value;
+    renderAll();
+  });
+  el("formSelect").addEventListener("change", (event) => {
+    state.formId = event.target.value;
     renderAll();
   });
   el("familySelect").addEventListener("change", (event) => {
