@@ -30,15 +30,11 @@ body {
 }
 
 .hero {
-  position: relative;
-  display: block;
-  min-height: 122px;
+  display: grid;
+  grid-template-columns: 1fr minmax(240px, 320px);
+  gap: 18px;
+  align-items: start;
   margin-bottom: 22px;
-}
-
-.hero-title {
-  display: block;
-  min-width: 0;
 }
 
 .eyebrow {
@@ -64,27 +60,6 @@ h1 {
 .hero-note,
 .stat-label {
   color: var(--muted);
-}
-
-.hero-note {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: min(620px, 48%);
-  max-width: 620px;
-  margin-bottom: 0;
-  padding: 18px;
-  border-radius: 22px;
-}
-
-.hero-note .eyebrow {
-  margin-bottom: 6px;
-}
-
-.hero-note p {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.45;
 }
 
 .panel,
@@ -517,16 +492,9 @@ select {
   }
 }
 
-@media (max-width: 1040px) {
+@media (max-width: 840px) {
   .hero {
-    min-height: 0;
-  }
-
-  .hero-note {
-    position: static;
-    width: 100%;
-    max-width: none;
-    margin-top: 14px;
+    grid-template-columns: 1fr;
   }
 }
 
