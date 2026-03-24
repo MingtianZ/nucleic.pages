@@ -1,4 +1,4 @@
-const MANIFEST_PATH = "./assets/pure_dna_v1/manifest.json";
+const MANIFEST_PATH = "./assets/pure_dna/manifest.json";
 
 const FORM_META = {
   adna: { label: "A-DNA", color: "#8c3b2a" },
@@ -898,7 +898,7 @@ function renderFilters() {
 async function ensureFamilyLoaded(familyId) {
   if (state.familyCache.has(familyId)) return state.familyCache.get(familyId);
   const familyMeta = state.manifest.families[familyId];
-  const text = await fetchTextMaybeGzip(`./assets/pure_dna_v1/${pathFromRelative(familyMeta.file)}`);
+  const text = await fetchTextMaybeGzip(`./assets/pure_dna/${pathFromRelative(familyMeta.file)}`);
   const parsed = parseFamilyTable(text, familyId, familyMeta.param_ids, state.pdbManifest.maxPid);
   state.familyCache.set(familyId, parsed);
   return parsed;
@@ -1153,7 +1153,7 @@ async function boot() {
   state.familyId = state.manifest.defaults.family_id;
   state.parameterId = state.manifest.defaults.parameter_id;
 
-  const pdbManifestText = await fetchTextMaybeGzip(`./assets/pure_dna_v1/${pathFromRelative(state.manifest.file_map.pdb_manifest)}`);
+  const pdbManifestText = await fetchTextMaybeGzip(`./assets/pure_dna/${pathFromRelative(state.manifest.file_map.pdb_manifest)}`);
   state.pdbManifest = parsePdbManifest(pdbManifestText);
 
   renderOverviewCards();
