@@ -31,10 +31,10 @@ body {
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(560px, 760px);
+  grid-template-columns: minmax(0, 1fr) minmax(460px, 620px);
   gap: 22px;
   align-items: stretch;
-  margin-bottom: 28px;
+  margin-bottom: 22px;
 }
 
 .hero-title {
@@ -73,7 +73,7 @@ h1 {
   justify-self: end;
   align-self: stretch;
   width: 100%;
-  max-width: 760px;
+  max-width: 620px;
   margin-bottom: 0;
   padding: 14px 18px;
   border-radius: 18px;
