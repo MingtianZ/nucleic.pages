@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nucleic Geometry MVP</title>
+    <link rel="stylesheet" href="./css/main.css" />
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">MVP</p>
+          <h1>Nucleic Geometry Explorer</h1>
+          <p class="lede">
+            First end-to-end slice: core ABZ base-pair, step, and helical
+            parameters, backed by existing reference statistics and a clean
+            registry-first page layer.
+          </p>
+        </div>
+        <div class="hero-note" id="statusNote">Loading assets...</div>
+      </header>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Dataset Catalog</h2>
+          <p>Current project datasets, with plot readiness called out explicitly.</p>
+        </div>
+        <div id="datasetCards" class="card-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>ABZ Parameter Explorer</h2>
+          <p>
+            MVP scope intentionally stays small: 18 core parameters from
+            base-pair, step, and helical families.
+          </p>
+        </div>
+
+        <div class="controls">
+          <label>
+            Dataset
+            <select id="datasetSelect"></select>
+          </label>
+          <label>
+            Family
+            <select id="familySelect"></select>
+          </label>
+          <label>
+            Parameter
+            <select id="parameterSelect"></select>
+          </label>
+        </div>
+
+        <div class="stats-strip">
+          <div class="stat-box">
+            <span class="stat-label">A-DNA values</span>
+            <span class="stat-value" id="countA">-</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">B-DNA values</span>
+            <span class="stat-value" id="countB">-</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Z-DNA values</span>
+            <span class="stat-value" id="countZ">-</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Unique PDB IDs</span>
+            <span class="stat-value" id="countPdb">-</span>
+          </div>
+        </div>
+
+        <div id="plot" class="plot-panel"></div>
+      </section>
+    </div>
+
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>
