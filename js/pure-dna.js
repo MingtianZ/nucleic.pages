@@ -48,6 +48,28 @@ function isStaleRender(renderRevision) {
   return renderRevision !== state.renderRevision;
 }
 
+function renderInteractionError(error) {
+  console.error(error);
+  const plotNode = el("plot");
+  if (!plotNode) return;
+  if (typeof Plotly !== "undefined" && plotNode.data) Plotly.purge(plotNode);
+  const message = escapeHtml(error?.message || "Unknown error");
+  plotNode.innerHTML = `
+    <div class="empty-state">
+      Could not refresh the current view.<br />
+      <span class="meta">${message}</span>
+    </div>
+  `;
+}
+
+function triggerFiltersAndPlot() {
+  renderFiltersAndPlot().catch(renderInteractionError);
+}
+
+function triggerPlot(options = {}) {
+  renderPlot(options).catch(renderInteractionError);
+}
+
 function formatInt(value) {
   return Number(value || 0).toLocaleString();
 }
@@ -896,26 +918,26 @@ function updateMiniPanelSelection() {
 function bindControls() {
   renderSingleChoiceGroup("cleanlinessGroup", state.manifest.controls.cleanliness_options, state.cleanliness, (nextId) => {
     state.cleanliness = nextId;
-    renderFiltersAndPlot();
+    triggerFiltersAndPlot();
   });
 
   renderMultiChoiceGroup("methodGroup", state.manifest.controls.method_options, state.methods, (methodId) => {
     if (state.methods.has(methodId) && state.methods.size === 1) return;
     if (state.methods.has(methodId)) state.methods.delete(methodId);
     else state.methods.add(methodId);
-    renderFiltersAndPlot();
+    triggerFiltersAndPlot();
   });
 
   renderSingleChoiceGroup("resolutionGroup", state.manifest.controls.resolution_options, state.resolution, (nextId) => {
     state.resolution = nextId;
-    renderFiltersAndPlot();
+    triggerFiltersAndPlot();
   });
 
   renderMultiChoiceGroup("formGroup", formOptions(), state.forms, (formId) => {
     if (state.forms.has(formId) && state.forms.size === 1) return;
     if (state.forms.has(formId)) state.forms.delete(formId);
     else state.forms.add(formId);
-    renderFiltersAndPlot();
+    triggerFiltersAndPlot();
   });
 
   el("contextGroupTitle").textContent = currentContextLabel();
@@ -923,31 +945,31 @@ function bindControls() {
     if (state.contexts.has(contextId) && state.contexts.size === 1) return;
     if (state.contexts.has(contextId)) state.contexts.delete(contextId);
     else state.contexts.add(contextId);
-    renderFiltersAndPlot();
+    triggerFiltersAndPlot();
   });
 
   renderSingleChoiceGroup("terminalGroup", state.manifest.controls.terminal_policy_options, state.terminalPolicy, (nextId) => {
     state.terminalPolicy = nextId;
-    renderFiltersAndPlot();
+    triggerFiltersAndPlot();
   });
 
   renderSingleChoiceGroup("circularModeGroup", CIRCULAR_MODE_OPTIONS, state.circularMode, (nextId) => {
     state.circularMode = nextId;
-    renderFiltersAndPlot();
+    triggerFiltersAndPlot();
   });
 
-  el("familySelect").onchange = async (event) => {
+  el("familySelect").onchange = (event) => {
     state.familyId = event.target.value;
     state.parameterId = currentFamilyMeta().param_ids[0];
     resetContextsForFamily();
     renderFilters();
-    await renderPlot();
+    triggerPlot();
   };
 
-  el("parameterSelect").onchange = async (event) => {
+  el("parameterSelect").onchange = (event) => {
     state.parameterId = event.target.value;
     updateMiniPanelSelection();
-    await renderPlot({ skipOverview: true });
+    triggerPlot({ skipOverview: true });
   };
 }
 
@@ -1138,11 +1160,11 @@ function renderFamilyOverview(familyData, allowedMask, allowedRowsByForm, render
       </div>
       <div class="mini-plot" id="mini-${paramId}"></div>
     `;
-    panel.addEventListener("click", async () => {
+    panel.addEventListener("click", () => {
       state.parameterId = paramId;
       syncSelectors();
       updateMiniPanelSelection();
-      await renderPlot({ skipOverview: true });
+      triggerPlot({ skipOverview: true });
     });
     root.appendChild(panel);
 

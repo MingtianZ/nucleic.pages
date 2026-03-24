@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- DNA Double Helix — Pure DNA Explorer favicon -->
+  <!-- Colors match the project palette: accent blue, accent-2 red-brown, line muted -->
+
+  <!-- Section 1: y=3–8, Red strand in front -->
+  <path d="M8,3 C8,6 13,8 16,8" stroke="#174a7e" stroke-width="2.8" stroke-linecap="round"/>
+  <line x1="9" y1="4.5" x2="23" y2="4.5" stroke="#c4b69c" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M24,3 C24,6 19,8 16,8" stroke="#8c3b2a" stroke-width="2.8" stroke-linecap="round"/>
+
+  <!-- Section 2: y=8–16, Blue strand in front -->
+  <path d="M16,8 C6,8 6,16 16,16" stroke="#8c3b2a" stroke-width="2.8" stroke-linecap="round"/>
+  <line x1="23" y1="12" x2="9" y2="12" stroke="#c4b69c" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M16,8 C26,8 26,16 16,16" stroke="#174a7e" stroke-width="2.8" stroke-linecap="round"/>
+
+  <!-- Section 3: y=16–24, Red strand in front -->
+  <path d="M16,16 C6,16 6,24 16,24" stroke="#174a7e" stroke-width="2.8" stroke-linecap="round"/>
+  <line x1="9" y1="20" x2="23" y2="20" stroke="#c4b69c" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M16,16 C26,16 26,24 16,24" stroke="#8c3b2a" stroke-width="2.8" stroke-linecap="round"/>
+
+  <!-- Section 4: y=24–29, Blue strand in front -->
+  <path d="M16,24 C13,24 8,26 8,29" stroke="#8c3b2a" stroke-width="2.8" stroke-linecap="round"/>
+  <line x1="23" y1="27" x2="9" y2="27" stroke="#c4b69c" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M16,24 C19,24 24,26 24,29" stroke="#174a7e" stroke-width="2.8" stroke-linecap="round"/>
+</svg>
