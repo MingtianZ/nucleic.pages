@@ -23,7 +23,7 @@ const state = {
   cleanliness: "conservative",
   methods: new Set(["xray", "nmr"]),
   resolution: "any",
-  form: "all",
+  forms: new Set(Object.keys(FORM_META)),
   terminalPolicy: "include",
   circularMode: "auto",
   universeTableOpen: false,
@@ -378,14 +378,25 @@ function currentParameterMeta(paramId = state.parameterId) {
   return state.parameterMetaById[paramId];
 }
 
+function formOptions() {
+  return (state.manifest?.controls?.form_options ?? []).filter((item) => item.id !== "all");
+}
+
 function selectedFormIds() {
-  if (state.form === "all") return ["adna", "bdna", "zdna", "other"];
-  return [state.form];
+  const selected = [...state.forms].filter((formId) => FORM_META[formId]);
+  return selected.length ? selected : Object.keys(FORM_META);
 }
 
 function selectedMethodsLabel() {
   const selected = state.manifest.controls.method_options
     .filter((item) => state.methods.has(item.id))
+    .map((item) => item.label);
+  return selected.length ? selected.join(", ") : "None";
+}
+
+function selectedFormsLabel() {
+  const selected = formOptions()
+    .filter((item) => state.forms.has(item.id))
     .map((item) => item.label);
   return selected.length ? selected.join(", ") : "None";
 }
@@ -422,7 +433,7 @@ function buildAllowedPidMask() {
     if (!passesCleanliness(row)) continue;
     if (!state.methods.has(row.method)) continue;
     if (!passesResolution(row)) continue;
-    if (state.form !== "all" && row.form !== state.form) continue;
+    if (!state.forms.has(row.form)) continue;
     mask[row.pid] = 1;
     pdbCountsByForm[row.form] = (pdbCountsByForm[row.form] ?? 0) + 1;
     total += 1;
@@ -785,8 +796,10 @@ function bindControls() {
     renderFiltersAndPlot();
   });
 
-  renderSingleChoiceGroup("formGroup", state.manifest.controls.form_options, state.form, (nextId) => {
-    state.form = nextId;
+  renderMultiChoiceGroup("formGroup", formOptions(), state.forms, (formId) => {
+    if (state.forms.has(formId) && state.forms.size === 1) return;
+    if (state.forms.has(formId)) state.forms.delete(formId);
+    else state.forms.add(formId);
     renderFiltersAndPlot();
   });
 
@@ -977,7 +990,7 @@ function updateStats(allowed, familyData, accumulation) {
   el("filteredPdbCount").textContent = formatInt(allowed.total);
   el("filteredObservationCount").textContent = formatInt(accumulation.totalVisibleObservations);
   el("loadedFamilyRows").textContent = formatInt(familyData.rowCount);
-  el("currentFormScope").textContent = state.manifest.controls.form_options.find((item) => item.id === state.form)?.label ?? "-";
+  el("currentFormScope").textContent = selectedFormsLabel();
   el("currentMethodScope").textContent = selectedMethodsLabel();
 }
 
@@ -1053,7 +1066,7 @@ async function boot() {
   state.cleanliness = state.manifest.defaults.cleanliness;
   state.methods = new Set(state.manifest.defaults.methods);
   state.resolution = state.manifest.defaults.resolution;
-  state.form = state.manifest.defaults.form;
+  state.forms = new Set(formOptions().map((item) => item.id));
   state.terminalPolicy = state.manifest.defaults.terminal_policy;
   state.familyId = state.manifest.defaults.family_id;
   state.parameterId = state.manifest.defaults.parameter_id;
