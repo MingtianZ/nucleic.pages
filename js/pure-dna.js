@@ -657,6 +657,10 @@ function resolutionLabel(row) {
   return `${formatFloat(row.resolution, 2)} A`;
 }
 
+function rcsbStructureUrl(pdbId) {
+  return `https://www.rcsb.org/structure/${encodeURIComponent(String(pdbId ?? "").toUpperCase())}`;
+}
+
 function renderUniverseTablePage() {
   const tbody = el("universeTableBody");
   const pageLabel = el("universePageLabel");
@@ -673,7 +677,15 @@ function renderUniverseTablePage() {
 
   tbody.innerHTML = pageRows.map((row) => `
     <tr>
-      <td>${escapeHtml(row.pdbId)}</td>
+      <td>
+        <a
+          class="pdb-link"
+          href="${rcsbStructureUrl(row.pdbId)}"
+          target="_blank"
+          rel="noreferrer noopener"
+          title="Open ${escapeHtml(String(row.pdbId).toUpperCase())} on RCSB"
+        >${escapeHtml(String(row.pdbId).toUpperCase())}</a>
+      </td>
       <td><span class="pill ${escapeHtml(row.form)}">${escapeHtml(FORM_META[row.form]?.label ?? row.form)}</span></td>
       <td>${escapeHtml(row.method)}</td>
       <td>${escapeHtml(resolutionLabel(row))}</td>

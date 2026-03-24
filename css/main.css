@@ -343,6 +343,17 @@ select {
   background: rgba(23, 74, 126, 0.05);
 }
 
+.pdb-link {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.pdb-link:hover,
+.pdb-link:focus-visible {
+  text-decoration: underline;
+}
+
 .pill {
   display: inline-block;
   padding: 3px 8px;
