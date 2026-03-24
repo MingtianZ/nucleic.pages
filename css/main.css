@@ -30,18 +30,15 @@ body {
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(460px, 620px);
-  gap: 22px;
-  align-items: stretch;
+  position: relative;
+  display: block;
+  min-height: 122px;
   margin-bottom: 22px;
 }
 
 .hero-title {
-  display: flex;
-  align-items: flex-start;
+  display: block;
   min-width: 0;
-  padding-top: 10px;
 }
 
 .eyebrow {
@@ -70,13 +67,14 @@ h1 {
 }
 
 .hero-note {
-  justify-self: end;
-  align-self: stretch;
-  width: 100%;
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(620px, 48%);
   max-width: 620px;
   margin-bottom: 0;
-  padding: 14px 18px;
-  border-radius: 18px;
+  padding: 18px;
+  border-radius: 22px;
 }
 
 .hero-note .eyebrow {
@@ -519,9 +517,16 @@ select {
   }
 }
 
-@media (max-width: 840px) {
+@media (max-width: 1040px) {
   .hero {
-    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .hero-note {
+    position: static;
+    width: 100%;
+    max-width: none;
+    margin-top: 14px;
   }
 }
 
