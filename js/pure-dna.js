@@ -7,6 +7,14 @@ const FORM_META = {
   other: { label: "Other", color: "#6c4f35" },
 };
 
+const CIRCULAR_MODE_OPTIONS = [
+  { id: "auto", label: "Auto" },
+  { id: "wrap_360", label: "0-360" },
+  { id: "signed_180", label: "-180 to 180" },
+];
+
+const UNIVERSE_TABLE_PAGE_SIZE = 100;
+
 const state = {
   manifest: null,
   pdbManifest: null,
@@ -17,6 +25,10 @@ const state = {
   resolution: "any",
   form: "all",
   terminalPolicy: "include",
+  circularMode: "auto",
+  universeTableOpen: false,
+  universeTablePage: 0,
+  universeSortedRows: null,
   familyId: "backbone",
   parameterId: "alpha",
 };
@@ -35,6 +47,15 @@ function formatInt(value) {
 
 function formatFloat(value, digits = 2) {
   return Number.isFinite(value) ? Number(value).toFixed(digits) : "-";
+}
+
+function escapeHtml(text) {
+  return String(text ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function wrapCircular(value, period = 360) {
@@ -174,11 +195,38 @@ function findAdaptiveCircularCut(rawCounts, paramMeta) {
 
 function buildCircularTickSpec(period, displayCut, compact = false) {
   const tickvals = compact ? [0, period / 2, period] : [0, period / 3, (2 * period) / 3, period];
-  const ticktext = tickvals.map((tick) => {
-    const original = wrapCircular(tick + displayCut, period);
-    return Number.isInteger(original) ? `${original}` : original.toFixed(1);
-  });
+  let ticktext;
+  if (state.circularMode === "wrap_360") {
+    ticktext = tickvals.map((tick) => {
+      const value = compact && tick === period ? period : tick;
+      return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+    });
+  } else {
+    ticktext = tickvals.map((tick) => {
+      let signed = tick - (period / 2);
+      if (tick === period) signed = period / 2;
+      return Number.isInteger(signed) ? `${signed}` : signed.toFixed(1);
+    });
+  }
   return { tickvals, ticktext };
+}
+
+function circularDisplayConfig(rawCounts, paramMeta) {
+  const period = paramMeta.period ?? 360;
+  const bins = rawCounts.length;
+  if (state.circularMode === "wrap_360") {
+    return { displayCut: 0, shiftBins: 0, axisMode: "wrap_360" };
+  }
+  if (state.circularMode === "signed_180") {
+    const shiftBins = Math.round((period / 2) / (period / bins)) % bins;
+    return { displayCut: period / 2, shiftBins, axisMode: "signed_180" };
+  }
+  const adaptive = findAdaptiveCircularCut(rawCounts, paramMeta);
+  return {
+    displayCut: adaptive.displayCut,
+    shiftBins: adaptive.shiftBins,
+    axisMode: "auto",
+  };
 }
 
 function percentileFromCounts(counts, range, q) {
@@ -279,6 +327,15 @@ function parsePdbManifest(text) {
   const pidMeta = new Array(maxPid + 1);
   for (const row of rows) pidMeta[row.pid] = row;
   return { rows, pidMeta, maxPid };
+}
+
+function universeRowsSorted() {
+  if (state.universeSortedRows) return state.universeSortedRows;
+  state.universeSortedRows = [...state.pdbManifest.rows].sort((a, b) => {
+    if (a.pdbId !== b.pdbId) return a.pdbId.localeCompare(b.pdbId);
+    return a.pid - b.pid;
+  });
+  return state.universeSortedRows;
 }
 
 function parseFamilyTable(text, familyId, paramIds, maxPid) {
@@ -419,7 +476,7 @@ function addValueToAccumulator(acc, paramMeta, value, pid, range) {
   return true;
 }
 
-function finalizeAccumulator(acc, paramMeta, range, displayCut = 0, shiftBins = 0) {
+function finalizeAccumulator(acc, paramMeta, range, displayCut = 0, shiftBins = 0, axisMode = "auto") {
   const rawCounts = paramMeta.isCircular ? rotateCircularCounts(acc.rawCounts, shiftBins) : [...acc.rawCounts];
   const smoothCounts = paramMeta.isCircular
     ? smoothCircularCounts(rawCounts)
@@ -436,6 +493,9 @@ function finalizeAccumulator(acc, paramMeta, range, displayCut = 0, shiftBins = 
   });
   const hoverAngles = paramMeta.isCircular
     ? x.map((displayAngle) => wrapCircular(displayAngle + displayCut, paramMeta.period ?? 360))
+    : null;
+  const hoverDisplayAngles = paramMeta.isCircular
+    ? x.map((displayAngle) => displayAngle - ((paramMeta.period ?? 360) / 2))
     : null;
 
   let summary;
@@ -472,7 +532,7 @@ function finalizeAccumulator(acc, paramMeta, range, displayCut = 0, shiftBins = 
     };
   }
 
-  return { x, y: density, hoverAngles, displayCut, summary };
+  return { x, y: density, hoverAngles, hoverDisplayAngles, displayCut, axisMode, summary };
 }
 
 function accumulateVisibleSeries(familyData, allowedPidMask, paramId, paramMeta, range) {
@@ -499,6 +559,7 @@ function accumulateVisibleSeries(familyData, allowedPidMask, paramId, paramMeta,
 
   let displayCut = 0;
   let shiftBins = 0;
+  let axisMode = "wrap_360";
   if (paramMeta.isCircular) {
     const aggregateCounts = new Uint32Array(bins);
     for (const acc of Object.values(seriesAcc)) {
@@ -506,18 +567,20 @@ function accumulateVisibleSeries(familyData, allowedPidMask, paramId, paramMeta,
         aggregateCounts[index] += acc.rawCounts[index];
       }
     }
-    const seamChoice = findAdaptiveCircularCut(aggregateCounts, paramMeta);
+    const seamChoice = circularDisplayConfig(aggregateCounts, paramMeta);
     displayCut = seamChoice.displayCut;
     shiftBins = seamChoice.shiftBins;
+    axisMode = seamChoice.axisMode;
   }
 
   return {
     totalVisibleObservations,
     displayCut,
+    axisMode,
     series: Object.fromEntries(
       Object.entries(seriesAcc).map(([formId, acc]) => [
         formId,
-        finalizeAccumulator(acc, paramMeta, range, displayCut, shiftBins),
+        finalizeAccumulator(acc, paramMeta, range, displayCut, shiftBins, axisMode),
       ]),
     ),
   };
@@ -572,6 +635,90 @@ function renderOverviewCards() {
     `;
     root.appendChild(card);
   }
+}
+
+function cleanlinessLabel(row) {
+  if (row.passesConservative) return "No extra het";
+  if (row.passesMw100) return "No het >100 Da";
+  if (row.passesRelaxed) return "Only inorganic-like";
+  return "All";
+}
+
+function resolutionLabel(row) {
+  if (!row.resolutionKnown || !Number.isFinite(row.resolution)) return "-";
+  return `${formatFloat(row.resolution, 2)} A`;
+}
+
+function renderUniverseTablePage() {
+  const tbody = el("universeTableBody");
+  const pageLabel = el("universePageLabel");
+  const prevButton = el("universePrev");
+  const nextButton = el("universeNext");
+  if (!state.universeTableOpen) return;
+
+  const rows = universeRowsSorted();
+  const totalPages = Math.max(1, Math.ceil(rows.length / UNIVERSE_TABLE_PAGE_SIZE));
+  const currentPage = Math.min(state.universeTablePage, totalPages - 1);
+  state.universeTablePage = currentPage;
+  const start = currentPage * UNIVERSE_TABLE_PAGE_SIZE;
+  const pageRows = rows.slice(start, start + UNIVERSE_TABLE_PAGE_SIZE);
+
+  tbody.innerHTML = pageRows.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.pdbId)}</td>
+      <td><span class="pill ${escapeHtml(row.form)}">${escapeHtml(FORM_META[row.form]?.label ?? row.form)}</span></td>
+      <td>${escapeHtml(row.method)}</td>
+      <td>${escapeHtml(resolutionLabel(row))}</td>
+      <td>${escapeHtml(cleanlinessLabel(row))}</td>
+      <td>${row.hasAnyHet ? "Yes" : "No"}</td>
+      <td>${formatInt(row.residueCount)}</td>
+    </tr>
+  `).join("");
+
+  pageLabel.textContent = `Page ${currentPage + 1} / ${totalPages}`;
+  prevButton.disabled = currentPage === 0;
+  nextButton.disabled = currentPage >= totalPages - 1;
+}
+
+function closeUniverseDrawer() {
+  state.universeTableOpen = false;
+  const drawer = el("universeDrawer");
+  const toggle = el("universeToggle");
+  drawer.hidden = true;
+  toggle.textContent = "Open table";
+  toggle.setAttribute("aria-expanded", "false");
+  el("universeTableBody").innerHTML = "";
+}
+
+function openUniverseDrawer() {
+  state.universeTableOpen = true;
+  const drawer = el("universeDrawer");
+  const toggle = el("universeToggle");
+  drawer.hidden = false;
+  toggle.textContent = "Close table";
+  toggle.setAttribute("aria-expanded", "true");
+  renderUniverseTablePage();
+}
+
+function toggleUniverseDrawer() {
+  if (state.universeTableOpen) closeUniverseDrawer();
+  else openUniverseDrawer();
+}
+
+function bindUniverseDrawer() {
+  el("universeToggle").addEventListener("click", () => {
+    toggleUniverseDrawer();
+  });
+  el("universePrev").addEventListener("click", () => {
+    if (!state.universeTableOpen || state.universeTablePage === 0) return;
+    state.universeTablePage -= 1;
+    renderUniverseTablePage();
+  });
+  el("universeNext").addEventListener("click", () => {
+    if (!state.universeTableOpen) return;
+    state.universeTablePage += 1;
+    renderUniverseTablePage();
+  });
 }
 
 function renderSingleChoiceGroup(rootId, options, activeId, onSelect) {
@@ -651,6 +798,11 @@ function bindControls() {
     renderFiltersAndPlot();
   });
 
+  renderSingleChoiceGroup("circularModeGroup", CIRCULAR_MODE_OPTIONS, state.circularMode, (nextId) => {
+    state.circularMode = nextId;
+    renderFiltersAndPlot();
+  });
+
   el("familySelect").onchange = async (event) => {
     state.familyId = event.target.value;
     state.parameterId = currentFamilyMeta().param_ids[0];
@@ -702,15 +854,20 @@ function buildTrace(formId, seriesData, paramMeta) {
   };
   if (paramMeta.isCircular) {
     trace.customdata = seriesData.hoverAngles;
-    trace.hovertemplate = "Angle %{customdata:.1f}<br>Density %{y:.4f}<extra>" + formMeta.label + "</extra>";
+    if (seriesData.axisMode === "wrap_360") {
+      trace.hovertemplate = "Angle %{customdata:.1f}<br>Density %{y:.4f}<extra>" + formMeta.label + "</extra>";
+    } else {
+      trace.customdata = seriesData.hoverAngles.map((angle, index) => [seriesData.hoverDisplayAngles[index], angle]);
+      trace.hovertemplate = "View %{customdata[0]:.1f}<br>Angle %{customdata[1]:.1f}<br>Density %{y:.4f}<extra>" + formMeta.label + "</extra>";
+    }
   }
   return trace;
 }
 
-function buildMiniLayout(paramMeta, range, displayCut = 0) {
+function buildMiniLayout(paramMeta, range, displayCut = 0, axisMode = "auto") {
   const xaxis = paramMeta.isCircular
     ? (() => {
-        const ticks = buildCircularTickSpec(paramMeta.period ?? 360, displayCut, true);
+        const ticks = buildCircularTickSpec(paramMeta.period ?? 360, displayCut, true, axisMode);
         return {
         range: [0, paramMeta.period ?? 360],
         tickvals: ticks.tickvals,
@@ -813,7 +970,7 @@ function renderFamilyOverview(familyData, allowedMask) {
       .map(([formId, seriesData]) => buildTrace(formId, seriesData, paramMeta));
     if (!traces.length) continue;
 
-    Plotly.newPlot(`mini-${paramId}`, traces, buildMiniLayout(paramMeta, range, accumulation.displayCut), {
+    Plotly.newPlot(`mini-${paramId}`, traces, buildMiniLayout(paramMeta, range, accumulation.displayCut, accumulation.axisMode), {
       responsive: true,
       displayModeBar: false,
     }).then(() => Plotly.Plots.resize(`mini-${paramId}`)).catch(() => {});
@@ -828,10 +985,10 @@ function updateStats(allowed, familyData, accumulation) {
   el("currentMethodScope").textContent = selectedMethodsLabel();
 }
 
-function buildLayout(paramMeta, range, displayCut = 0) {
+function buildLayout(paramMeta, range, displayCut = 0, axisMode = "auto") {
   const xaxis = paramMeta.isCircular
     ? (() => {
-        const ticks = buildCircularTickSpec(paramMeta.period ?? 360, displayCut, false);
+        const ticks = buildCircularTickSpec(paramMeta.period ?? 360, displayCut, false, axisMode);
         return {
         title: paramMeta.display_name,
         range: [0, paramMeta.period ?? 360],
@@ -884,7 +1041,7 @@ async function renderPlot() {
   }
 
   el("plot").innerHTML = "";
-  Plotly.newPlot("plot", traces, buildLayout(paramMeta, range, accumulation.displayCut), {
+  Plotly.newPlot("plot", traces, buildLayout(paramMeta, range, accumulation.displayCut, accumulation.axisMode), {
     responsive: true,
     displayModeBar: false,
   });
@@ -917,6 +1074,7 @@ async function boot() {
   state.pdbManifest = parsePdbManifest(pdbManifestText);
 
   renderOverviewCards();
+  bindUniverseDrawer();
   await renderFiltersAndPlot();
 }
 

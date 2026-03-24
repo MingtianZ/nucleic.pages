@@ -33,6 +33,40 @@
           </p>
         </div>
         <div id="overviewCards" class="card-grid"></div>
+        <div class="panel-subhead collapse-toggle-row">
+          <h3>Universe Entry Table</h3>
+          <button type="button" id="universeToggle" class="toggle-btn collapse-toggle" aria-expanded="false">
+            Open table
+          </button>
+        </div>
+        <div id="universeDrawer" class="drawer-panel" hidden>
+          <div class="drawer-toolbar">
+            <p>
+              Full pure-DNA master pool, rendered only while this drawer is open.
+            </p>
+            <div class="drawer-pager">
+              <button type="button" id="universePrev" class="toggle-btn">Prev</button>
+              <span id="universePageLabel" class="drawer-page-label">Page 1 / 1</span>
+              <button type="button" id="universeNext" class="toggle-btn">Next</button>
+            </div>
+          </div>
+          <div class="table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>PDB</th>
+                  <th>Form</th>
+                  <th>Method</th>
+                  <th>Resolution</th>
+                  <th>Cleanliness</th>
+                  <th>HET</th>
+                  <th>Residues</th>
+                </tr>
+              </thead>
+              <tbody id="universeTableBody"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section class="panel">
@@ -68,6 +102,11 @@
           <div class="filter-cluster">
             <span class="cluster-title">Terminal Policy</span>
             <div id="terminalGroup" class="toggle-group"></div>
+          </div>
+
+          <div class="filter-cluster">
+            <span class="cluster-title">Circular Axis</span>
+            <div id="circularModeGroup" class="toggle-group"></div>
           </div>
         </div>
 
