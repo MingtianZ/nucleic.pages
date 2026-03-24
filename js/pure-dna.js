@@ -194,20 +194,19 @@ function parseFamilyTable(text, familyId, paramIds, maxPid) {
   const indexOf = Object.fromEntries(header.map((key, index) => [key, index]));
   const rowCount = Math.max(0, lines.length - 1);
   const pid = new Uint32Array(rowCount);
-  const terminalAny = new Uint8Array(rowCount);
+  const edgeFlag = new Uint8Array(rowCount);
   const values = Object.fromEntries(paramIds.map((paramId) => [paramId, new Float32Array(rowCount)]));
   const pidStart = new Int32Array(maxPid + 1).fill(-1);
   const pidCount = new Uint32Array(maxPid + 1);
+  const edgeIndex = indexOf.edge_flag ?? indexOf.is_terminal_any;
 
-  let previousPid = -1;
   for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
     const cols = lines[rowIndex + 1].split("\t");
     const rowPid = parseIntSafe(cols[indexOf.pid]);
     pid[rowIndex] = rowPid;
-    terminalAny[rowIndex] = parseIntSafe(cols[indexOf.is_terminal_any]);
+    edgeFlag[rowIndex] = edgeIndex !== undefined ? parseIntSafe(cols[edgeIndex]) : 0;
     if (pidStart[rowPid] === -1) pidStart[rowPid] = rowIndex;
     pidCount[rowPid] += 1;
-    previousPid = rowPid;
     for (const paramId of paramIds) {
       values[paramId][rowIndex] = parseNumber(cols[indexOf[paramId]]);
     }
@@ -219,7 +218,7 @@ function parseFamilyTable(text, familyId, paramIds, maxPid) {
     pid,
     pidStart,
     pidCount,
-    terminalAny,
+    edgeFlag,
     values,
   };
 }
@@ -228,8 +227,8 @@ function currentFamilyMeta() {
   return state.manifest.families[state.familyId];
 }
 
-function currentParameterMeta() {
-  return state.parameterMetaById[state.parameterId];
+function currentParameterMeta(paramId = state.parameterId) {
+  return state.parameterMetaById[paramId];
 }
 
 function selectedFormIds() {
@@ -379,7 +378,7 @@ function finalizeAccumulator(acc, paramMeta, range) {
   return { x, y: density, summary };
 }
 
-function accumulateVisibleSeries(familyData, allowedPidMask, paramMeta, range) {
+function accumulateVisibleSeries(familyData, allowedPidMask, paramId, paramMeta, range) {
   const bins = paramMeta.isCircular ? 72 : 64;
   const seriesIds = selectedFormIds();
   const seriesAcc = Object.fromEntries(seriesIds.map((formId) => [formId, initAccumulator(paramMeta, bins)]));
@@ -393,8 +392,8 @@ function accumulateVisibleSeries(familyData, allowedPidMask, paramMeta, range) {
       if (start < 0 || !count) continue;
       for (let offset = 0; offset < count; offset += 1) {
         const rowIndex = start + offset;
-        if (state.terminalPolicy === "exclude" && familyData.terminalAny[rowIndex] === 1) continue;
-        const value = familyData.values[state.parameterId][rowIndex];
+        if (state.terminalPolicy === "exclude" && familyData.edgeFlag[rowIndex] === 1) continue;
+        const value = familyData.values[paramId][rowIndex];
         const accepted = addValueToAccumulator(seriesAcc[formId], paramMeta, value, row.pid, range);
         if (accepted) totalVisibleObservations += 1;
       }
@@ -442,8 +441,8 @@ function renderOverviewCards() {
       kind: "Files",
       title: "Loaded families",
       lines: [
-        `Backbone ${formatInt(state.manifest.families.backbone.row_count)} rows`,
-        `Sugar ${formatInt(state.manifest.families.sugar_torsion.row_count)} / Pucker ${formatInt(state.manifest.families.pucker.row_count)}`,
+        `Backbone ${formatInt(state.manifest.families.backbone.row_count)} / Sugar ${formatInt(state.manifest.families.sugar_torsion.row_count)} / Pucker ${formatInt(state.manifest.families.pucker.row_count)}`,
+        `Base pair ${formatInt(state.manifest.families.base_pair.row_count)} / Step ${formatInt(state.manifest.families.step.row_count)} / Helical ${formatInt(state.manifest.families.helical.row_count)}`,
       ],
     },
   ];
@@ -588,6 +587,36 @@ function buildTrace(formId, seriesData) {
   };
 }
 
+function buildMiniLayout(paramMeta, range) {
+  const xaxis = paramMeta.isCircular
+    ? {
+        range: [0, paramMeta.period ?? 360],
+        tickvals: [0, 180, 360],
+        ticktext: ["0", "180", "360"],
+        showgrid: false,
+        zeroline: false,
+      }
+    : {
+        range,
+        showgrid: false,
+        zeroline: false,
+      };
+
+  return {
+    margin: { l: 28, r: 8, t: 10, b: 28 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(255,253,247,0.4)",
+    xaxis,
+    yaxis: {
+      showgrid: false,
+      zeroline: false,
+      showticklabels: false,
+      rangemode: "tozero",
+    },
+    showlegend: false,
+  };
+}
+
 function renderSummaryCards(series, paramMeta) {
   const root = el("seriesSummary");
   root.innerHTML = "";
@@ -625,6 +654,46 @@ function renderSummaryCards(series, paramMeta) {
       </div>
     `;
     root.appendChild(card);
+  }
+}
+
+function renderFamilyOverview(familyData, allowedMask) {
+  const root = el("familyOverview");
+  root.innerHTML = "";
+  const familyMeta = currentFamilyMeta();
+
+  for (const paramId of familyMeta.param_ids) {
+    const paramMeta = currentParameterMeta(paramId);
+    const range = parameterRange(paramMeta);
+    const accumulation = accumulateVisibleSeries(familyData, allowedMask, paramId, paramMeta, range);
+    const totalRows = Object.values(accumulation.series).reduce((sum, entry) => sum + entry.summary.n, 0);
+
+    const panel = document.createElement("button");
+    panel.type = "button";
+    panel.className = `mini-panel ${paramId === state.parameterId ? "active" : ""}`;
+    panel.innerHTML = `
+      <div class="mini-head">
+        <h3 class="mini-title">${paramMeta.display_name}</h3>
+        <span class="mini-meta">${formatInt(totalRows)} rows</span>
+      </div>
+      <div class="mini-plot" id="mini-${paramId}"></div>
+    `;
+    panel.addEventListener("click", async () => {
+      state.parameterId = paramId;
+      syncSelectors();
+      await renderPlot();
+    });
+    root.appendChild(panel);
+
+    const traces = Object.entries(accumulation.series)
+      .filter(([, seriesData]) => seriesData.summary.n > 0)
+      .map(([formId, seriesData]) => buildTrace(formId, seriesData));
+    if (!traces.length) continue;
+
+    Plotly.newPlot(`mini-${paramId}`, traces, buildMiniLayout(paramMeta, range), {
+      responsive: true,
+      displayModeBar: false,
+    }).then(() => Plotly.Plots.resize(`mini-${paramId}`)).catch(() => {});
   }
 }
 
@@ -673,13 +742,14 @@ async function renderPlot() {
   const paramMeta = currentParameterMeta();
   const range = parameterRange(paramMeta);
   const allowed = buildAllowedPidMask();
-  const accumulation = accumulateVisibleSeries(familyData, allowed.mask, paramMeta, range);
+  const accumulation = accumulateVisibleSeries(familyData, allowed.mask, state.parameterId, paramMeta, range);
   const traces = Object.entries(accumulation.series)
     .filter(([, seriesData]) => seriesData.summary.n > 0)
     .map(([formId, seriesData]) => buildTrace(formId, seriesData));
 
   updateStats(allowed, familyData, accumulation);
   renderSummaryCards(accumulation.series, paramMeta);
+  renderFamilyOverview(familyData, allowed.mask);
 
   if (!traces.length) {
     el("plot").innerHTML = `<div class="empty-state">No observations match the current filter stack.</div>`;

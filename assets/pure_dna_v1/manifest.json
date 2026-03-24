@@ -1,7 +1,7 @@
 {
   "version": "pure_dna_v1",
   "display_name": "Pure DNA Explorer",
-  "generated_at": "2026-03-24T13:46:19.800Z",
+  "generated_at": "2026-03-24T14:16:03.206Z",
   "universe": {
     "pdb_entries": 1830,
     "forms": {
@@ -32,8 +32,8 @@
     "resolution": "any",
     "form": "all",
     "terminal_policy": "include",
-    "family_id": "backbone",
-    "parameter_id": "alpha"
+    "family_id": "base_pair",
+    "parameter_id": "shear"
   },
   "controls": {
     "cleanliness_options": [
@@ -174,9 +174,231 @@
         "sszp",
         "dp"
       ]
+    },
+    "base_pair": {
+      "family_id": "base_pair",
+      "display_name": "Base Pair",
+      "file": "./base_pairs.tsv.gz",
+      "row_count": 17933,
+      "param_ids": [
+        "shear",
+        "stretch",
+        "stagger",
+        "buckle",
+        "propeller",
+        "opening"
+      ]
+    },
+    "step": {
+      "family_id": "step",
+      "display_name": "Step",
+      "file": "./steps.tsv.gz",
+      "row_count": 14659,
+      "param_ids": [
+        "shift",
+        "slide",
+        "rise",
+        "tilt",
+        "roll",
+        "twist"
+      ]
+    },
+    "helical": {
+      "family_id": "helical",
+      "display_name": "Helical",
+      "file": "./helical.tsv.gz",
+      "row_count": 14659,
+      "param_ids": [
+        "x_disp",
+        "y_disp",
+        "h_rise",
+        "inclination",
+        "tip",
+        "h_twist"
+      ]
     }
   },
   "parameter_registry": [
+    {
+      "param_id": "shear",
+      "family_id": "base_pair",
+      "display_name": "Shear",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -3,
+        3
+      ]
+    },
+    {
+      "param_id": "stretch",
+      "family_id": "base_pair",
+      "display_name": "Stretch",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -1,
+        1
+      ]
+    },
+    {
+      "param_id": "stagger",
+      "family_id": "base_pair",
+      "display_name": "Stagger",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -2,
+        2
+      ]
+    },
+    {
+      "param_id": "buckle",
+      "family_id": "base_pair",
+      "display_name": "Buckle",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -40,
+        40
+      ]
+    },
+    {
+      "param_id": "propeller",
+      "family_id": "base_pair",
+      "display_name": "Propeller",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -40,
+        10
+      ]
+    },
+    {
+      "param_id": "opening",
+      "family_id": "base_pair",
+      "display_name": "Opening",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -20,
+        20
+      ]
+    },
+    {
+      "param_id": "shift",
+      "family_id": "step",
+      "display_name": "Shift",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -3,
+        3
+      ]
+    },
+    {
+      "param_id": "slide",
+      "family_id": "step",
+      "display_name": "Slide",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -3,
+        3
+      ]
+    },
+    {
+      "param_id": "rise",
+      "family_id": "step",
+      "display_name": "Rise",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        2,
+        5
+      ]
+    },
+    {
+      "param_id": "tilt",
+      "family_id": "step",
+      "display_name": "Tilt",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -20,
+        20
+      ]
+    },
+    {
+      "param_id": "roll",
+      "family_id": "step",
+      "display_name": "Roll",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -20,
+        30
+      ]
+    },
+    {
+      "param_id": "twist",
+      "family_id": "step",
+      "display_name": "Twist",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        15,
+        55
+      ]
+    },
+    {
+      "param_id": "x_disp",
+      "family_id": "helical",
+      "display_name": "X-disp",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -4,
+        4
+      ]
+    },
+    {
+      "param_id": "y_disp",
+      "family_id": "helical",
+      "display_name": "Y-disp",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -4,
+        4
+      ]
+    },
+    {
+      "param_id": "h_rise",
+      "family_id": "helical",
+      "display_name": "h-Rise",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        2.5,
+        4
+      ]
+    },
+    {
+      "param_id": "inclination",
+      "family_id": "helical",
+      "display_name": "Inclination",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -40,
+        40
+      ]
+    },
+    {
+      "param_id": "tip",
+      "family_id": "helical",
+      "display_name": "Tip",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        -40,
+        40
+      ]
+    },
+    {
+      "param_id": "h_twist",
+      "family_id": "helical",
+      "display_name": "h-Twist",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        0,
+        60
+      ]
+    },
     {
       "param_id": "alpha",
       "family_id": "backbone",
