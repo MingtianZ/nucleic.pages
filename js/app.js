@@ -111,73 +111,292 @@ function syncSelectors() {
   fillSelect(el("parameterSelect"), params, "parameter_id", "display_name", state.parameterId);
 }
 
-function makeTrace(values, label, color) {
-  return {
-    type: "histogram",
-    x: values,
-    name: label,
-    opacity: 0.5,
-    histnorm: "probability density",
-    nbinsx: 50,
-    marker: { color },
-  };
-}
-
 function selectedFormIds() {
   return state.formId === "all" ? ["adna", "bdna", "zdna"] : [state.formId];
 }
 
+function selectedFormLabel() {
+  return FORM_OPTIONS.find((item) => item.form_id === state.formId)?.display_name ?? "-";
+}
+
+function parameterRange(param) {
+  return param.recommended_range ?? null;
+}
+
+function finiteValues(values, range) {
+  let xs = values.filter((value) => Number.isFinite(value));
+  if (range) {
+    xs = xs.filter((value) => value >= range[0] && value <= range[1]);
+  }
+  return xs;
+}
+
+function gaussianKernel(radius, sigma) {
+  const kernel = [];
+  let sum = 0;
+  for (let i = -radius; i <= radius; i += 1) {
+    const value = Math.exp(-(i * i) / (2 * sigma * sigma));
+    kernel.push(value);
+    sum += value;
+  }
+  return kernel.map((value) => value / sum);
+}
+
+function smoothHistogram(values, range, bins = 72, sigma = 1.6) {
+  const [vmin, vmax] = range;
+  const xs = finiteValues(values, range);
+  const width = (vmax - vmin) / bins;
+  const counts = new Array(bins).fill(0);
+
+  for (const value of xs) {
+    let idx = Math.floor((value - vmin) / width);
+    if (idx < 0) idx = 0;
+    if (idx >= bins) idx = bins - 1;
+    counts[idx] += 1;
+  }
+
+  const radius = Math.max(2, Math.ceil(3 * sigma));
+  const kernel = gaussianKernel(radius, sigma);
+  const smooth = counts.map((_, index) => {
+    let acc = 0;
+    for (let k = -radius; k <= radius; k += 1) {
+      const j = index + k;
+      if (j < 0 || j >= bins) continue;
+      acc += counts[j] * kernel[k + radius];
+    }
+    return acc;
+  });
+
+  const total = smooth.reduce((sum, value) => sum + value, 0);
+  const density = total > 0 ? smooth.map((value) => value / total) : smooth;
+  const centers = density.map((_, index) => vmin + width * (index + 0.5));
+  return { x: centers, y: density, n: xs.length };
+}
+
+function percentile(sortedValues, q) {
+  if (!sortedValues.length) return null;
+  const pos = (sortedValues.length - 1) * q;
+  const low = Math.floor(pos);
+  const high = Math.ceil(pos);
+  if (low === high) return sortedValues[low];
+  const frac = pos - low;
+  return sortedValues[low] * (1 - frac) + sortedValues[high] * frac;
+}
+
+function summarize(values, range) {
+  const xs = finiteValues(values, range).sort((a, b) => a - b);
+  const n = xs.length;
+  if (!n) {
+    return { n: 0, mean: null, std: null, p05: null, p95: null };
+  }
+  const mean = xs.reduce((sum, value) => sum + value, 0) / n;
+  const variance = xs.reduce((sum, value) => sum + (value - mean) ** 2, 0) / n;
+  return {
+    n,
+    mean,
+    std: Math.sqrt(variance),
+    p05: percentile(xs, 0.05),
+    p95: percentile(xs, 0.95),
+  };
+}
+
+function formatNumber(value, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return Number(value).toFixed(digits);
+}
+
+function buildDensityTrace(param, formId, range, options = {}) {
+  const unit = param.unit === "A" ? "Å" : param.unit;
+  const titleUnit = unit ? ` (${unit})` : "";
+  const smoothed = smoothHistogram(param.forms[formId], range, options.bins ?? 96, options.sigma ?? 1.8);
+  return {
+    type: "scatter",
+    mode: "lines",
+    x: smoothed.x,
+    y: smoothed.y,
+    name: `${FORM_META[formId].label} (${smoothed.n})`,
+    line: {
+      color: FORM_META[formId].color,
+      width: options.lineWidth ?? 3,
+      shape: "spline",
+      smoothing: 0.85,
+    },
+    fill: options.fill ? "tozeroy" : "none",
+    fillcolor: `${FORM_META[formId].color}22`,
+    hovertemplate:
+      `${FORM_META[formId].label}<br>` +
+      `${param.display_name}: %{x:.2f}${titleUnit}<br>` +
+      `Density: %{y:.4f}<extra></extra>`,
+    showlegend: options.showLegend ?? true,
+  };
+}
+
 function renderStats() {
   const param = currentParam();
-  el("currentForm").textContent =
-    FORM_OPTIONS.find((item) => item.form_id === state.formId)?.display_name ?? "-";
+  el("currentForm").textContent = selectedFormLabel();
   el("countA").textContent = param.forms.adna.length.toLocaleString();
   el("countB").textContent = param.forms.bdna.length.toLocaleString();
   el("countZ").textContent = param.forms.zdna.length.toLocaleString();
   el("countPdb").textContent = param.pdb_ids.length.toLocaleString();
 }
 
+function renderSeriesSummary(range) {
+  const root = el("seriesSummary");
+  const param = currentParam();
+  root.innerHTML = "";
+  for (const formId of selectedFormIds()) {
+    const meta = FORM_META[formId];
+    const stats = summarize(param.forms[formId], range);
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `
+      <span class="kind" style="color:${meta.color}">${meta.label}</span>
+      <h3>${param.display_name}</h3>
+      <p class="meta">Smoothed density over the registry range.</p>
+      <div class="metric-list">
+        <div class="metric">
+          <span class="metric-label">n</span>
+          <span class="metric-value">${stats.n.toLocaleString()}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">mean</span>
+          <span class="metric-value">${formatNumber(stats.mean)}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">std</span>
+          <span class="metric-value">${formatNumber(stats.std)}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">p05</span>
+          <span class="metric-value">${formatNumber(stats.p05)}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">p95</span>
+          <span class="metric-value">${formatNumber(stats.p95)}</span>
+        </div>
+      </div>
+    `;
+    root.appendChild(card);
+  }
+}
+
 function renderPlot() {
   const param = currentParam();
-  const traces = selectedFormIds().map((formId) =>
-    makeTrace(param.forms[formId], FORM_META[formId].label, FORM_META[formId].color)
-  );
-
   const unit = param.unit === "A" ? "Å" : param.unit;
   const titleUnit = unit ? ` (${unit})` : "";
+  const range = parameterRange(param);
+  const traces = selectedFormIds().map((formId) =>
+    buildDensityTrace(param, formId, range, {
+      lineWidth: state.formId === "all" ? 3 : 4,
+      fill: true,
+    })
+  );
+
   const titlePrefix =
     state.formId === "all"
       ? "All forms"
-      : FORM_OPTIONS.find((item) => item.form_id === state.formId)?.display_name ?? "Selection";
-  Plotly.newPlot(
+      : selectedFormLabel();
+  Plotly.react(
     el("plot"),
     traces,
     {
       title: `${titlePrefix}: ${param.display_name}${titleUnit}`,
-      barmode: "overlay",
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
-      margin: { l: 54, r: 20, t: 56, b: 52 },
+      margin: { l: 58, r: 22, t: 58, b: 54 },
       legend: { orientation: "h", y: 1.12 },
       xaxis: {
         title: `${param.display_name}${titleUnit}`,
         zeroline: false,
+        range: range ?? undefined,
+        showgrid: true,
+        gridcolor: "rgba(106, 98, 86, 0.12)",
       },
       yaxis: {
         title: "Density",
         zeroline: false,
+        showgrid: true,
+        gridcolor: "rgba(106, 98, 86, 0.12)",
       },
+      hovermode: "x unified",
     },
-    { responsive: true, displaylogo: false }
+    { responsive: true, displaylogo: false, displayModeBar: false }
   );
+  renderSeriesSummary(range);
+}
+
+function renderFamilyOverview() {
+  const root = el("familyOverview");
+  const family = currentFamily();
+  const formIds = selectedFormIds();
+  root.innerHTML = "";
+
+  for (const [paramId, param] of Object.entries(family.params)) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `mini-panel${paramId === state.parameterId ? " active" : ""}`;
+    card.innerHTML = `
+      <div class="mini-head">
+        <h3 class="mini-title">${param.display_name}</h3>
+        <span class="mini-meta">${param.unit === "A" ? "Å" : param.unit}</span>
+      </div>
+      <div class="mini-plot"></div>
+    `;
+    card.addEventListener("click", () => {
+      if (state.parameterId === paramId) return;
+      state.parameterId = paramId;
+      renderAll();
+    });
+    root.appendChild(card);
+
+    const plotRoot = card.querySelector(".mini-plot");
+    const range = parameterRange(param);
+    const traces = formIds.map((formId) =>
+      buildDensityTrace(param, formId, range, {
+        lineWidth: paramId === state.parameterId ? 2.8 : 2.2,
+        fill: false,
+        showLegend: false,
+        bins: 72,
+        sigma: 1.7,
+      })
+    );
+
+    Plotly.newPlot(
+      plotRoot,
+      traces,
+      {
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        margin: { l: 34, r: 12, t: 8, b: 30 },
+        height: 220,
+        xaxis: {
+          range: range ?? undefined,
+          zeroline: false,
+          showgrid: true,
+          gridcolor: "rgba(106, 98, 86, 0.12)",
+          tickfont: { size: 10 },
+        },
+        yaxis: {
+          zeroline: false,
+          showgrid: true,
+          gridcolor: "rgba(106, 98, 86, 0.08)",
+          showticklabels: false,
+          title: "",
+        },
+        hovermode: "x unified",
+      },
+      { responsive: true, displaylogo: false, displayModeBar: false }
+    );
+  }
 }
 
 function renderAll() {
   syncSelectors();
   renderStats();
   renderPlot();
+  renderFamilyOverview();
   el("statusNote").textContent =
-    "MVP loaded: curated ABZ explorer for 18 core parameters, with explicit form selection for A-DNA, B-DNA, Z-DNA, or All.";
+    "ABZ explorer loaded with density curves, visible-series summaries, and a family overview grid for fast parameter comparison.";
 }
 
 async function bootstrap() {
