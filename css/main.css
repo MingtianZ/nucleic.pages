@@ -30,19 +30,7 @@ body {
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: 1fr minmax(240px, 320px);
-  gap: 18px;
-  align-items: start;
   margin-bottom: 22px;
-}
-
-.eyebrow {
-  margin: 0 0 10px;
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--accent);
 }
 
 h1,
@@ -55,9 +43,7 @@ h1 {
   line-height: 0.95;
 }
 
-.lede,
 .panel-head p,
-.hero-note,
 .stat-label {
   color: var(--muted);
 }
@@ -183,21 +169,6 @@ h1 {
   display: block;
   margin-top: 3px;
   font-size: 18px;
-}
-
-.tag {
-  display: inline-block;
-  margin-top: 10px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  background: #e7f1fb;
-  color: var(--accent);
-}
-
-.tag.off {
-  background: #f3e7de;
-  color: var(--accent-2);
 }
 
 .controls {
@@ -489,12 +460,6 @@ select {
 @media (max-width: 1120px) {
   .small-multiple-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 840px) {
-  .hero {
-    grid-template-columns: 1fr;
   }
 }
 

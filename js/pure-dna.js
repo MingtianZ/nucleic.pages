@@ -20,6 +20,7 @@ const state = {
   pdbManifest: null,
   parameterMetaById: {},
   familyCache: new Map(),
+  renderRevision: 0,
   cleanliness: "conservative",
   methods: new Set(["xray", "nmr"]),
   resolution: "any",
@@ -36,6 +37,15 @@ const state = {
 
 function el(id) {
   return document.getElementById(id);
+}
+
+function nextRenderRevision() {
+  state.renderRevision += 1;
+  return state.renderRevision;
+}
+
+function isStaleRender(renderRevision) {
+  return renderRevision !== state.renderRevision;
 }
 
 function formatInt(value) {
@@ -63,13 +73,6 @@ function escapeHtml(text) {
 function wrapCircular(value, period = 360) {
   const wrapped = value % period;
   return wrapped < 0 ? wrapped + period : wrapped;
-}
-
-function circularDelta(a, b, period = 360) {
-  const da = wrapCircular(a, period);
-  const db = wrapCircular(b, period);
-  const delta = Math.abs(da - db) % period;
-  return Math.min(delta, period - delta);
 }
 
 function gaussianKernel(radius, sigma) {
@@ -1108,16 +1111,17 @@ function renderSummaryCards(series, paramMeta) {
   }
 }
 
-function renderFamilyOverview(familyData, allowedMask) {
+function renderFamilyOverview(familyData, allowedMask, allowedRowsByForm, renderRevision = state.renderRevision) {
+  if (isStaleRender(renderRevision)) return;
   const root = el("familyOverview");
   for (const plotNode of root.querySelectorAll(".mini-plot")) {
     if (plotNode.data) Plotly.purge(plotNode);
   }
   root.innerHTML = "";
   const familyMeta = currentFamilyMeta();
-  const allowedRowsByForm = groupAllowedRowsByForm(allowedMask);
 
   for (const paramId of familyMeta.param_ids) {
+    if (isStaleRender(renderRevision)) return;
     const paramMeta = currentParameterMeta(paramId);
     const range = computeEffectiveRange(paramMeta, familyData, paramId, allowedMask);
     const accumulation = accumulateVisibleSeries(familyData, allowedMask, paramId, paramMeta, range, allowedRowsByForm);
@@ -1150,7 +1154,7 @@ function renderFamilyOverview(familyData, allowedMask) {
     Plotly.newPlot(`mini-${paramId}`, traces, buildMiniLayout(paramMeta, range, accumulation.displayCut, accumulation.axisMode), {
       responsive: true,
       displayModeBar: false,
-    }).then(() => Plotly.Plots.resize(`mini-${paramId}`)).catch(() => {});
+    }).then(() => Plotly.Plots.resize(`mini-${paramId}`)).catch((err) => console.warn(`Mini-plot ${paramId}:`, err));
   }
 }
 
@@ -1201,22 +1205,29 @@ function buildLayout(paramMeta, range, displayCut = 0, axisMode = "auto") {
 
 async function renderPlot(options = {}) {
   const { skipOverview = false } = options;
-  const familyData = await ensureFamilyLoaded(state.familyId);
-  const paramMeta = currentParameterMeta();
+  const renderRevision = nextRenderRevision();
+  const requestedFamilyId = state.familyId;
+  const requestedParameterId = state.parameterId;
+  const familyData = await ensureFamilyLoaded(requestedFamilyId);
+  if (isStaleRender(renderRevision)) return;
+  const paramMeta = currentParameterMeta(requestedParameterId);
+  if (!paramMeta || !familyData.values[requestedParameterId]) return;
   const allowed = buildAllowedPidMask();
   const allowedRowsByForm = groupAllowedRowsByForm(allowed.mask);
-  const range = computeEffectiveRange(paramMeta, familyData, state.parameterId, allowed.mask);
-  const accumulation = accumulateVisibleSeries(familyData, allowed.mask, state.parameterId, paramMeta, range, allowedRowsByForm);
+  const range = computeEffectiveRange(paramMeta, familyData, requestedParameterId, allowed.mask);
+  const accumulation = accumulateVisibleSeries(familyData, allowed.mask, requestedParameterId, paramMeta, range, allowedRowsByForm);
   const traces = Object.entries(accumulation.series)
     .filter(([, seriesData]) => seriesData.summary.n > 0)
     .map(([formId, seriesData]) => buildTrace(formId, seriesData, paramMeta));
 
+  if (isStaleRender(renderRevision)) return;
   updateStats(allowed, familyData, accumulation);
   renderSummaryCards(accumulation.series, paramMeta);
   if (skipOverview) updateMiniPanelSelection();
-  else renderFamilyOverview(familyData, allowed.mask);
+  else renderFamilyOverview(familyData, allowed.mask, allowedRowsByForm, renderRevision);
 
   if (!traces.length) {
+    if (isStaleRender(renderRevision)) return;
     const plotNode = el("plot");
     if (plotNode.data) Plotly.purge(plotNode);
     plotNode.innerHTML = `<div class="empty-state">No observations match the current filter stack.</div>`;
@@ -1232,10 +1243,11 @@ async function renderPlot(options = {}) {
     displayModeBar: false,
   };
   if (canReact) {
-    Plotly.react("plot", traces, layout, config);
+    await Plotly.react("plot", traces, layout, config);
   } else {
-    Plotly.newPlot("plot", traces, layout, config);
+    await Plotly.newPlot("plot", traces, layout, config);
   }
+  if (isStaleRender(renderRevision)) return;
 }
 
 async function renderFiltersAndPlot() {
