@@ -605,7 +605,10 @@ function rowPassesObservationFilters(familyData, rowIndex) {
   const contextValue = familyData.context?.[rowIndex];
   if (familyData.context && contextValue && !state.contexts.has(contextValue)) return false;
   const backboneStateValue = familyData.secondaryContext?.[rowIndex];
-  if (familyData.secondaryContext && backboneStateValue && !state.backboneStates.has(backboneStateValue)) return false;
+  if (familyData.secondaryContext) {
+    if (!backboneStateValue) return false;
+    if (!state.backboneStates.has(backboneStateValue)) return false;
+  }
   return true;
 }
 
