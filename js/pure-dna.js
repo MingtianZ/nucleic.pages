@@ -38,6 +38,9 @@ const state = {
   universeTableOpen: false,
   universeTablePage: 0,
   universeSortedRows: null,
+  filteredTableOpen: false,
+  filteredTablePage: 0,
+  filteredRows: [],
   familyId: "backbone",
   parameterId: "alpha",
 };
@@ -418,6 +421,13 @@ function universeRowsSorted() {
   return state.universeSortedRows;
 }
 
+function rowsSortedByPdb(rows) {
+  return [...rows].sort((a, b) => {
+    if (a.pdbId !== b.pdbId) return a.pdbId.localeCompare(b.pdbId);
+    return a.pid - b.pid;
+  });
+}
+
 function parseFamilyTable(text, familyMeta, maxPid) {
   const lines = parseTsvLines(text);
   const header = lines[0].split("\t");
@@ -579,6 +589,15 @@ function groupAllowedRowsByForm(allowedPidMask) {
     if (groups[row.form]) groups[row.form].push(row);
   }
   return groups;
+}
+
+function allowedPdbRows(allowedPidMask) {
+  const rows = [];
+  for (const row of state.pdbManifest.rows) {
+    if (!allowedPidMask[row.pid]) continue;
+    rows.push(row);
+  }
+  return rowsSortedByPdb(rows);
 }
 
 function rowPassesObservationFilters(familyData, rowIndex) {
@@ -826,17 +845,13 @@ function nakbAtlasUrl(pdbId) {
   return `https://nakb.org/atlas=${encodeURIComponent(String(pdbId ?? "").toUpperCase())}`;
 }
 
-function renderUniverseTablePage() {
-  const tbody = el("universeTableBody");
-  const pageLabel = el("universePageLabel");
-  const prevButton = el("universePrev");
-  const nextButton = el("universeNext");
-  if (!state.universeTableOpen) return;
-
-  const rows = universeRowsSorted();
+function renderPdbTablePage(rows, bodyId, pageLabelId, prevId, nextId, pageIndex) {
+  const tbody = el(bodyId);
+  const pageLabel = el(pageLabelId);
+  const prevButton = el(prevId);
+  const nextButton = el(nextId);
   const totalPages = Math.max(1, Math.ceil(rows.length / UNIVERSE_TABLE_PAGE_SIZE));
-  const currentPage = Math.min(state.universeTablePage, totalPages - 1);
-  state.universeTablePage = currentPage;
+  const currentPage = Math.min(pageIndex, totalPages - 1);
   const start = currentPage * UNIVERSE_TABLE_PAGE_SIZE;
   const pageRows = rows.slice(start, start + UNIVERSE_TABLE_PAGE_SIZE);
 
@@ -863,6 +878,31 @@ function renderUniverseTablePage() {
   pageLabel.textContent = `Page ${currentPage + 1} / ${totalPages}`;
   prevButton.disabled = currentPage === 0;
   nextButton.disabled = currentPage >= totalPages - 1;
+  return currentPage;
+}
+
+function renderUniverseTablePage() {
+  if (!state.universeTableOpen) return;
+  state.universeTablePage = renderPdbTablePage(
+    universeRowsSorted(),
+    "universeTableBody",
+    "universePageLabel",
+    "universePrev",
+    "universeNext",
+    state.universeTablePage,
+  );
+}
+
+function renderFilteredTablePage() {
+  if (!state.filteredTableOpen) return;
+  state.filteredTablePage = renderPdbTablePage(
+    state.filteredRows,
+    "filteredTableBody",
+    "filteredPageLabel",
+    "filteredPrev",
+    "filteredNext",
+    state.filteredTablePage,
+  );
 }
 
 function closeUniverseDrawer() {
@@ -903,6 +943,47 @@ function bindUniverseDrawer() {
     if (!state.universeTableOpen) return;
     state.universeTablePage += 1;
     renderUniverseTablePage();
+  });
+}
+
+function closeFilteredDrawer() {
+  state.filteredTableOpen = false;
+  const drawer = el("filteredDrawer");
+  const toggle = el("filteredToggle");
+  drawer.hidden = true;
+  toggle.textContent = "Show filtered PDB entries";
+  toggle.setAttribute("aria-expanded", "false");
+  el("filteredTableBody").innerHTML = "";
+}
+
+function openFilteredDrawer() {
+  state.filteredTableOpen = true;
+  const drawer = el("filteredDrawer");
+  const toggle = el("filteredToggle");
+  drawer.hidden = false;
+  toggle.textContent = "Hide filtered PDB entries";
+  toggle.setAttribute("aria-expanded", "true");
+  renderFilteredTablePage();
+}
+
+function toggleFilteredDrawer() {
+  if (state.filteredTableOpen) closeFilteredDrawer();
+  else openFilteredDrawer();
+}
+
+function bindFilteredDrawer() {
+  el("filteredToggle").addEventListener("click", () => {
+    toggleFilteredDrawer();
+  });
+  el("filteredPrev").addEventListener("click", () => {
+    if (!state.filteredTableOpen || state.filteredTablePage === 0) return;
+    state.filteredTablePage -= 1;
+    renderFilteredTablePage();
+  });
+  el("filteredNext").addEventListener("click", () => {
+    if (!state.filteredTableOpen) return;
+    state.filteredTablePage += 1;
+    renderFilteredTablePage();
   });
 }
 
@@ -1255,6 +1336,8 @@ function updateStats(allowed, familyData, accumulation) {
   el("currentFormScope").textContent = selectedFormsLabel();
   el("currentMethodScope").textContent = selectedMethodsLabel();
   el("currentContextScope").textContent = selectedContextsLabel();
+  state.filteredRows = allowed.rows;
+  if (state.filteredTableOpen) renderFilteredTablePage();
 }
 
 function buildLayout(paramMeta, range, displayCut = 0, axisMode = "auto") {
@@ -1304,6 +1387,7 @@ async function renderPlot(options = {}) {
   if (!paramMeta || !familyData.values[requestedParameterId]) return;
   const allowed = buildAllowedPidMask();
   const allowedRowsByForm = groupAllowedRowsByForm(allowed.mask);
+  allowed.rows = allowedPdbRows(allowed.mask);
   const range = computeEffectiveRange(paramMeta, familyData, requestedParameterId, allowed.mask);
   const accumulation = accumulateVisibleSeries(familyData, allowed.mask, requestedParameterId, paramMeta, range, allowedRowsByForm);
   const traces = Object.entries(accumulation.series)
@@ -1363,6 +1447,7 @@ async function boot() {
 
   renderOverviewCards();
   bindUniverseDrawer();
+  bindFilteredDrawer();
   await renderFiltersAndPlot();
 }
 

@@ -172,6 +172,44 @@
           </div>
         </div>
 
+        <div class="panel-subhead collapse-toggle-row">
+          <div>
+            <h3>Filtered PDB Table</h3>
+            <p>Open to inspect the PDB entries that currently pass the active PDB-level filters.</p>
+          </div>
+          <button type="button" id="filteredToggle" class="toggle-btn collapse-toggle" aria-expanded="false">
+            Show filtered PDB entries
+          </button>
+        </div>
+        <div id="filteredDrawer" class="drawer-panel" hidden>
+          <div class="drawer-toolbar">
+            <p>
+              Each row is one PDB entry that currently passes the active PDB-level filters. PDB links open the NAKB Atlas entry, and the Form column uses NAKB classification.
+            </p>
+            <div class="drawer-pager">
+              <button type="button" id="filteredPrev" class="toggle-btn">Prev</button>
+              <span id="filteredPageLabel" class="drawer-page-label">Page 1 / 1</span>
+              <button type="button" id="filteredNext" class="toggle-btn">Next</button>
+            </div>
+          </div>
+          <div class="table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>PDB</th>
+                  <th>Form (NAKB)</th>
+                  <th>Method</th>
+                  <th>Resolution</th>
+                  <th>Cleanliness</th>
+                  <th>HET</th>
+                  <th>Residues</th>
+                </tr>
+              </thead>
+              <tbody id="filteredTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div id="plot" class="plot-panel">
           <div id="loadingIndicator" class="empty-state">Loading local DNA tables...</div>
         </div>
