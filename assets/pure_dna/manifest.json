@@ -1,7 +1,7 @@
 {
   "version": "pure_dna",
   "display_name": "Pure DNA Explorer",
-  "generated_at": "2026-03-25T00:42:13.188Z",
+  "generated_at": "2026-03-25T12:07:48.083Z",
   "universe": {
     "pdb_entries": 1830,
     "forms": {
@@ -185,6 +185,10 @@
         {
           "id": "BIII",
           "label": "BIII"
+        },
+        {
+          "id": "Unclassified",
+          "label": "Unclassified"
         }
       ]
     },
@@ -235,6 +239,10 @@
         {
           "id": "BIII",
           "label": "BIII"
+        },
+        {
+          "id": "Unclassified",
+          "label": "Unclassified"
         }
       ]
     },
@@ -284,6 +292,10 @@
         {
           "id": "BIII",
           "label": "BIII"
+        },
+        {
+          "id": "Unclassified",
+          "label": "Unclassified"
         }
       ]
     },
@@ -332,6 +344,10 @@
         {
           "id": "BIII",
           "label": "BIII"
+        },
+        {
+          "id": "Unclassified",
+          "label": "Unclassified"
         }
       ]
     },
