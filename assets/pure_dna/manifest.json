@@ -1,7 +1,7 @@
 {
   "version": "pure_dna",
   "display_name": "Pure DNA Explorer",
-  "generated_at": "2026-03-25T15:35:20.998Z",
+  "generated_at": "2026-03-25T17:24:41.114Z",
   "universe": {
     "pdb_entries": 1830,
     "forms": {
@@ -1116,8 +1116,8 @@
       "unit": "deg",
       "value_type": "numeric_linear",
       "display_range_default": [
-        -360,
-        360
+        -180,
+        180
       ]
     },
     {
