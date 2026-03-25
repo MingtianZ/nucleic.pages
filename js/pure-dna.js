@@ -468,7 +468,9 @@ function parseFamilyTable(text, familyMeta, maxPid) {
     pidCount,
     edgeFlag,
     context,
+    contextEmptyValue: familyMeta.context_empty_value ?? "",
     secondaryContext,
+    secondaryContextEmptyValue: familyMeta.secondary_context_empty_value ?? "",
     values,
   };
 }
@@ -602,12 +604,17 @@ function allowedPdbRows(allowedPidMask) {
 
 function rowPassesObservationFilters(familyData, rowIndex) {
   if (state.terminalPolicy === "exclude" && familyData.edgeFlag[rowIndex] === 1) return false;
-  const contextValue = familyData.context?.[rowIndex];
-  if (familyData.context && contextValue && !state.contexts.has(contextValue)) return false;
+  const rawContextValue = familyData.context?.[rowIndex];
+  if (familyData.context) {
+    const contextValue = rawContextValue || familyData.contextEmptyValue || "";
+    if (!contextValue) return false;
+    if (!state.contexts.has(contextValue)) return false;
+  }
   const backboneStateValue = familyData.secondaryContext?.[rowIndex];
   if (familyData.secondaryContext) {
-    if (!backboneStateValue) return false;
-    if (!state.backboneStates.has(backboneStateValue)) return false;
+    const normalizedState = backboneStateValue || familyData.secondaryContextEmptyValue || "";
+    if (!normalizedState) return false;
+    if (!state.backboneStates.has(normalizedState)) return false;
   }
   return true;
 }
@@ -1178,6 +1185,7 @@ function computeEffectiveRange(paramMeta, familyData = null, paramId = null, all
   }
 
   if (!defaultRange) return dataRange;
+  if (min >= defaultRange[0] && max <= defaultRange[1]) return defaultRange;
   return [
     Math.min(defaultRange[0], dataRange[0]),
     Math.max(defaultRange[1], dataRange[1]),
