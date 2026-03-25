@@ -22,6 +22,7 @@ const state = {
   familyCache: new Map(),
   renderRevision: 0,
   cleanliness: "conservative",
+  duplexGate: "any",
   methods: new Set(["xray", "nmr"]),
   resolution: "any",
   forms: new Set(Object.keys(FORM_META)),
@@ -383,6 +384,13 @@ function parsePdbManifest(text) {
       backboneRows: parseIntSafe(cols[indexOf.backbone_rows]),
       sugarRows: parseIntSafe(cols[indexOf.sugar_rows]),
       puckerRows: parseIntSafe(cols[indexOf.pucker_rows]),
+      basePairRows: parseIntSafe(cols[indexOf.base_pair_rows]),
+      stepRows: parseIntSafe(cols[indexOf.step_rows]),
+      helicalRows: parseIntSafe(cols[indexOf.helical_rows]),
+      pairedNtCount: parseIntSafe(cols[indexOf.paired_nt_count]),
+      pairedResidueFraction: parseNumber(cols[indexOf.paired_residue_fraction]),
+      hasDuplexCore: parseIntSafe(cols[indexOf.has_duplex_core]) === 1,
+      allResiduesPaired: parseIntSafe(cols[indexOf.all_residues_paired]) === 1,
       hetNames: String(cols[indexOf.het_names] ?? "").trim() || "-",
     };
     rows.push(row);
@@ -536,11 +544,18 @@ function passesResolution(row) {
   }
 }
 
+function passesDuplexGate(row) {
+  if (state.duplexGate === "duplex_core") return row.hasDuplexCore;
+  if (state.duplexGate === "all_paired") return row.allResiduesPaired;
+  return true;
+}
+
 function buildAllowedPidMask() {
   const mask = new Uint8Array(state.pdbManifest.maxPid + 1);
   let total = 0;
   for (const row of state.pdbManifest.rows) {
     if (!passesCleanliness(row)) continue;
+    if (!passesDuplexGate(row)) continue;
     if (!state.methods.has(row.method)) continue;
     if (!passesResolution(row)) continue;
     if (!state.forms.has(row.form)) continue;
@@ -939,6 +954,11 @@ function bindControls() {
     triggerFiltersAndPlot();
   });
 
+  renderSingleChoiceGroup("duplexGroup", state.manifest.controls.duplex_gate_options, state.duplexGate, (nextId) => {
+    state.duplexGate = nextId;
+    triggerFiltersAndPlot();
+  });
+
   renderMultiChoiceGroup("methodGroup", state.manifest.controls.method_options, state.methods, (methodId) => {
     if (state.methods.has(methodId) && state.methods.size === 1) return;
     if (state.methods.has(methodId)) state.methods.delete(methodId);
@@ -1317,6 +1337,7 @@ async function boot() {
   state.familyId = state.manifest.defaults.family_id;
   state.parameterId = state.manifest.defaults.parameter_id;
   state.cleanliness = state.manifest.defaults.cleanliness;
+  state.duplexGate = state.manifest.defaults.duplex_gate ?? "any";
   state.methods = new Set(state.manifest.defaults.methods);
   state.resolution = state.manifest.defaults.resolution;
   state.forms = new Set(state.manifest.defaults.forms ?? formOptions().map((item) => item.id));
