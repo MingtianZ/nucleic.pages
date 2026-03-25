@@ -26,6 +26,7 @@ const state = {
   resolution: "any",
   forms: new Set(Object.keys(FORM_META)),
   contexts: new Set(),
+  backboneStates: new Set(["BI", "BII", "BIII"]),
   terminalPolicy: "include",
   circularMode: "auto",
   universeTableOpen: false,
@@ -413,6 +414,8 @@ function parseFamilyTable(text, familyMeta, maxPid) {
   const edgeFlag = new Uint8Array(rowCount);
   const contextColumn = familyMeta.context_column ?? null;
   const context = contextColumn ? new Array(rowCount) : null;
+  const secondaryContextColumn = familyMeta.secondary_context_column ?? null;
+  const secondaryContext = secondaryContextColumn ? new Array(rowCount) : null;
   const values = Object.fromEntries(paramIds.map((paramId) => [paramId, new Float32Array(rowCount)]));
   const pidStart = new Int32Array(maxPid + 1).fill(-1);
   const pidCount = new Uint32Array(maxPid + 1);
@@ -424,6 +427,7 @@ function parseFamilyTable(text, familyMeta, maxPid) {
     pid[rowIndex] = rowPid;
     edgeFlag[rowIndex] = edgeIndex !== undefined ? parseIntSafe(cols[edgeIndex]) : 0;
     if (context) context[rowIndex] = String(cols[indexOf[contextColumn]] ?? "").trim();
+    if (secondaryContext) secondaryContext[rowIndex] = String(cols[indexOf[secondaryContextColumn]] ?? "").trim();
     if (pidStart[rowPid] === -1) pidStart[rowPid] = rowIndex;
     pidCount[rowPid] += 1;
     for (const paramId of paramIds) {
@@ -439,6 +443,7 @@ function parseFamilyTable(text, familyMeta, maxPid) {
     pidCount,
     edgeFlag,
     context,
+    secondaryContext,
     values,
   };
 }
@@ -461,6 +466,14 @@ function currentContextOptions() {
 
 function currentContextLabel() {
   return currentFamilyMeta()?.context_label ?? "Sequence Context";
+}
+
+function currentBackboneStateOptions() {
+  return currentFamilyMeta()?.secondary_context_options ?? [];
+}
+
+function currentBackboneStateLabel() {
+  return currentFamilyMeta()?.secondary_context_label ?? "Backbone State";
 }
 
 function selectedFormIds() {
@@ -496,6 +509,7 @@ function selectedContextsLabel() {
 
 function resetContextsForFamily() {
   state.contexts = new Set(currentContextOptions().map((item) => item.id));
+  state.backboneStates = new Set(currentBackboneStateOptions().map((item) => item.id));
 }
 
 function passesCleanliness(row) {
@@ -549,6 +563,8 @@ function rowPassesObservationFilters(familyData, rowIndex) {
   if (state.terminalPolicy === "exclude" && familyData.edgeFlag[rowIndex] === 1) return false;
   const contextValue = familyData.context?.[rowIndex];
   if (familyData.context && contextValue && !state.contexts.has(contextValue)) return false;
+  const backboneStateValue = familyData.secondaryContext?.[rowIndex];
+  if (familyData.secondaryContext && backboneStateValue && !state.backboneStates.has(backboneStateValue)) return false;
   return true;
 }
 
@@ -949,6 +965,22 @@ function bindControls() {
     else state.contexts.add(contextId);
     triggerFiltersAndPlot();
   });
+
+  const backboneStateCluster = el("backboneStateCluster");
+  const backboneStateOptions = currentBackboneStateOptions();
+  if (backboneStateOptions.length) {
+    backboneStateCluster.hidden = false;
+    el("backboneStateGroupTitle").textContent = currentBackboneStateLabel();
+    renderMultiChoiceGroup("backboneStateGroup", backboneStateOptions, state.backboneStates, (stateId) => {
+      if (state.backboneStates.has(stateId) && state.backboneStates.size === 1) return;
+      if (state.backboneStates.has(stateId)) state.backboneStates.delete(stateId);
+      else state.backboneStates.add(stateId);
+      triggerFiltersAndPlot();
+    });
+  } else {
+    backboneStateCluster.hidden = true;
+    el("backboneStateGroup").innerHTML = "";
+  }
 
   renderSingleChoiceGroup("terminalGroup", state.manifest.controls.terminal_policy_options, state.terminalPolicy, (nextId) => {
     state.terminalPolicy = nextId;

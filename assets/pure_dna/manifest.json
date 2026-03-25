@@ -1,7 +1,7 @@
 {
   "version": "pure_dna",
   "display_name": "Pure DNA Explorer",
-  "generated_at": "2026-03-24T23:58:38.048Z",
+  "generated_at": "2026-03-25T00:36:22.336Z",
   "universe": {
     "pdb_entries": 1830,
     "forms": {
@@ -170,6 +170,22 @@
           "id": "T",
           "label": "T"
         }
+      ],
+      "secondary_context_column": "bi_bii",
+      "secondary_context_label": "Backbone State",
+      "secondary_context_options": [
+        {
+          "id": "BI",
+          "label": "BI"
+        },
+        {
+          "id": "BII",
+          "label": "BII"
+        },
+        {
+          "id": "BIII",
+          "label": "BIII"
+        }
       ]
     },
     "pseudo_torsion": {
@@ -204,7 +220,8 @@
           "id": "T",
           "label": "T"
         }
-      ]
+      ],
+      "secondary_context_options": []
     },
     "sugar_torsion": {
       "family_id": "sugar_torsion",
@@ -237,7 +254,8 @@
           "id": "T",
           "label": "T"
         }
-      ]
+      ],
+      "secondary_context_options": []
     },
     "pucker": {
       "family_id": "pucker",
@@ -269,7 +287,8 @@
           "id": "T",
           "label": "T"
         }
-      ]
+      ],
+      "secondary_context_options": []
     },
     "base_pair": {
       "family_id": "base_pair",
@@ -351,7 +370,8 @@
           "id": "T-T",
           "label": "T-T"
         }
-      ]
+      ],
+      "secondary_context_options": []
     },
     "pair_quality": {
       "family_id": "pair_quality",
@@ -432,7 +452,8 @@
           "id": "T-T",
           "label": "T-T"
         }
-      ]
+      ],
+      "secondary_context_options": []
     },
     "step": {
       "family_id": "step",
@@ -490,7 +511,8 @@
           "id": "TA/TA",
           "label": "TA/TA"
         }
-      ]
+      ],
+      "secondary_context_options": []
     },
     "helical": {
       "family_id": "helical",
@@ -548,7 +570,8 @@
           "id": "TA/TA",
           "label": "TA/TA"
         }
-      ]
+      ],
+      "secondary_context_options": []
     },
     "step_position": {
       "family_id": "step_position",
@@ -583,7 +606,8 @@
           "id": "Unclassified",
           "label": "Unclassified"
         }
-      ]
+      ],
+      "secondary_context_options": []
     },
     "same_strand": {
       "family_id": "same_strand",
@@ -639,7 +663,8 @@
           "id": "TA/TA",
           "label": "TA/TA"
         }
-      ]
+      ],
+      "secondary_context_options": []
     },
     "helix_radius": {
       "family_id": "helix_radius",
@@ -697,7 +722,8 @@
           "id": "TA/TA",
           "label": "TA/TA"
         }
-      ]
+      ],
+      "secondary_context_options": []
     }
   },
   "parameter_registry": [
