@@ -18,6 +18,14 @@ const CIRCULAR_MODE_OPTIONS = [
   { id: "signed_180", label: "-180 to 180" },
 ];
 
+const SMOOTHING_SIGMA_OPTIONS = [
+  { id: "0.0", label: "Off", sigma: 0.0 },
+  { id: "0.8", label: "0.8", sigma: 0.8 },
+  { id: "1.2", label: "1.2", sigma: 1.2 },
+  { id: "1.6", label: "1.6", sigma: 1.6 },
+  { id: "2.0", label: "2.0", sigma: 2.0 },
+];
+
 const UNIVERSE_TABLE_PAGE_SIZE = 100;
 
 const state = {
@@ -35,6 +43,7 @@ const state = {
   backboneStates: new Set(["BI", "BII", "BIII", "Missing"]),
   terminalPolicy: "include",
   circularMode: "auto",
+  smoothingSigma: "1.6",
   universeTableOpen: false,
   universeTablePage: 0,
   universeSortedRows: null,
@@ -119,6 +128,7 @@ function gaussianKernel(radius, sigma) {
 }
 
 function smoothLinearCounts(counts, sigma = 1.6) {
+  if (!(sigma > 0)) return [...counts];
   const radius = Math.max(2, Math.ceil(3 * sigma));
   const kernel = gaussianKernel(radius, sigma);
   return counts.map((_, index) => {
@@ -133,6 +143,7 @@ function smoothLinearCounts(counts, sigma = 1.6) {
 }
 
 function smoothCircularCounts(counts, sigma = 1.6) {
+  if (!(sigma > 0)) return [...counts];
   const radius = Math.max(2, Math.ceil(3 * sigma));
   const kernel = gaussianKernel(radius, sigma);
   const bins = counts.length;
@@ -665,13 +676,14 @@ function addValueToAccumulator(acc, paramMeta, value, pid, range) {
 }
 
 function finalizeAccumulator(acc, paramMeta, range, displayCut = 0, shiftBins = 0, axisMode = "auto") {
+  const smoothingSigma = Number.parseFloat(state.smoothingSigma);
   const rawCounts = paramMeta.isCircular ? rotateCircularCounts(acc.rawCounts, shiftBins) : [...acc.rawCounts];
   const smoothCounts = paramMeta.isCircular
-    ? smoothCircularCounts(rawCounts)
-    : smoothLinearCounts(rawCounts);
+    ? smoothCircularCounts(rawCounts, smoothingSigma)
+    : smoothLinearCounts(rawCounts, smoothingSigma);
   const totalSmooth = smoothCounts.reduce((sum, value) => sum + value, 0);
-  const density = totalSmooth ? smoothCounts.map((value) => value / totalSmooth) : smoothCounts;
-  const x = density.map((_, index) => {
+  const probability = totalSmooth ? smoothCounts.map((value) => value / totalSmooth) : smoothCounts;
+  const x = probability.map((_, index) => {
     if (paramMeta.isCircular) {
       const width = (paramMeta.period ?? 360) / acc.bins;
       return width * (index + 0.5);
@@ -700,16 +712,17 @@ function finalizeAccumulator(acc, paramMeta, range, displayCut = 0, shiftBins = 
       ? Math.sqrt(-2 * Math.log(resultant)) * 180 / Math.PI
       : null;
     let peakBin = 0;
-    for (let i = 1; i < acc.rawCounts.length; i += 1) {
-      if (acc.rawCounts[i] > acc.rawCounts[peakBin]) peakBin = i;
+    for (let i = 1; i < smoothCounts.length; i += 1) {
+      if (smoothCounts[i] > smoothCounts[peakBin]) peakBin = i;
     }
     const width = (paramMeta.period ?? 360) / acc.bins;
+    const displayedPeak = acc.n ? width * (peakBin + 0.5) : null;
     summary = {
       n: acc.n,
       pdbCount: acc.pdbSet.size,
       mean: meanAngle,
       spread: circularStd,
-      peak: acc.n ? width * (peakBin + 0.5) : null,
+      peak: displayedPeak !== null ? wrapCircular(displayedPeak + displayCut, paramMeta.period ?? 360) : null,
     };
   } else {
     const mean = acc.n ? acc.sum / acc.n : null;
@@ -724,7 +737,7 @@ function finalizeAccumulator(acc, paramMeta, range, displayCut = 0, shiftBins = 
     };
   }
 
-  return { x, y: density, hoverAngles, hoverDisplayAngles, displayCut, axisMode, summary };
+  return { x, y: probability, hoverAngles, hoverDisplayAngles, displayCut, axisMode, summary };
 }
 
 function accumulateVisibleSeries(familyData, allowedPidMask, paramId, paramMeta, range, allowedRowsByForm = null) {
@@ -1117,6 +1130,11 @@ function bindControls() {
     triggerFiltersAndPlot();
   });
 
+  renderSingleChoiceGroup("smoothingSigmaGroup", SMOOTHING_SIGMA_OPTIONS, state.smoothingSigma, (nextId) => {
+    state.smoothingSigma = nextId;
+    triggerFiltersAndPlot();
+  });
+
   el("familySelect").onchange = (event) => {
     state.familyId = event.target.value;
     state.parameterId = currentFamilyMeta().param_ids[0];
@@ -1203,15 +1221,15 @@ function buildTrace(formId, seriesData, paramMeta) {
     line: { width: 2.5, color: formMeta.color },
     fillcolor: `${formMeta.color}22`,
     name: formMeta.label,
-    hovertemplate: "%{x:.2f}<br>Density %{y:.4f}<extra>" + formMeta.label + "</extra>",
+    hovertemplate: "%{x:.2f}<br>Probability %{y:.4f}<extra>" + formMeta.label + "</extra>",
   };
   if (paramMeta.isCircular) {
     if (seriesData.axisMode === "signed_180") {
       trace.customdata = seriesData.hoverAngles.map((angle, index) => [seriesData.hoverDisplayAngles[index], angle]);
-      trace.hovertemplate = "View %{customdata[0]:.1f}<br>Angle %{customdata[1]:.1f}<br>Density %{y:.4f}<extra>" + formMeta.label + "</extra>";
+      trace.hovertemplate = "View %{customdata[0]:.1f}<br>Angle %{customdata[1]:.1f}<br>Probability %{y:.4f}<extra>" + formMeta.label + "</extra>";
     } else {
       trace.customdata = seriesData.hoverAngles;
-      trace.hovertemplate = "Angle %{customdata:.1f}<br>Density %{y:.4f}<extra>" + formMeta.label + "</extra>";
+      trace.hovertemplate = "Angle %{customdata:.1f}<br>Probability %{y:.4f}<extra>" + formMeta.label + "</extra>";
     }
   }
   return trace;
@@ -1266,7 +1284,7 @@ function renderSummaryCards(series, paramMeta) {
           ["Rows", formatInt(seriesData.summary.n)],
           ["PDBs", formatInt(seriesData.summary.pdbCount)],
           ["Mean", formatNumberWithUnit(circularMean, 1, unit)],
-          ["Spread", formatNumberWithUnit(seriesData.summary.spread, 1, unit)],
+          ["Circ. std", formatNumberWithUnit(seriesData.summary.spread, 1, unit)],
           ["Peak", formatNumberWithUnit(circularPeak, 1, unit)],
         ]
       : [
@@ -1376,7 +1394,7 @@ function buildLayout(paramMeta, range, displayCut = 0, axisMode = "auto") {
     plot_bgcolor: "rgba(255,253,247,0.65)",
     xaxis,
     yaxis: {
-      title: "Density",
+      title: "Probability (smoothed)",
       zeroline: false,
       rangemode: "tozero",
     },
