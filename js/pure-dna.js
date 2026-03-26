@@ -1375,26 +1375,32 @@ function buildLayout(paramMeta, range, displayCut = 0, axisMode = "auto") {
     ? (() => {
         const ticks = buildCircularTickSpec(paramMeta.period ?? 360, displayCut, false, axisMode);
         return {
-        title: axisTitle,
+        title: { text: axisTitle, standoff: 12 },
         range: [0, paramMeta.period ?? 360],
         tickvals: ticks.tickvals,
         ticktext: ticks.ticktext,
+        automargin: true,
+        ticklabeloverflow: "hide past div",
         zeroline: false,
       };
       })()
     : {
-        title: axisTitle,
+        title: { text: axisTitle, standoff: 12 },
         range,
+        automargin: true,
+        ticklabeloverflow: "hide past div",
         zeroline: false,
       };
 
   return {
-    margin: { l: 58, r: 18, t: 28, b: 54 },
+    margin: { l: 64, r: 22, t: 28, b: 72, pad: 4 },
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(255,253,247,0.65)",
     xaxis,
     yaxis: {
       title: "Probability (smoothed)",
+      automargin: true,
+      ticklabeloverflow: "hide past div",
       zeroline: false,
       rangemode: "tozero",
     },
