@@ -26,6 +26,14 @@ const SMOOTHING_SIGMA_OPTIONS = [
   { id: "2.0", label: "2.0", sigma: 2.0 },
 ];
 
+const MD_BDNA_46 = new Set([
+  "109D","126D","127D","158D","196D","1BNA","1D23","1D43","1D44","1D45",
+  "1D46","1D56","1D63","1DCV","1DOU","1FQ2","1JGR","1M6F","1S2R","2B0K",
+  "2B3E","2GVR","2GYX","2I2I","2I5A","2L8Q","307D","334D","355D","360D",
+  "3C2J","423D","428D","443D","455D","4AGZ","4AH0","4AH1","5ET9","5EWB",
+  "6CQ3","7BNA","7KCI","8C63","8CE2","9BNA",
+]);
+
 const UNIVERSE_TABLE_PAGE_SIZE = 100;
 
 const state = {
@@ -52,6 +60,7 @@ const state = {
   filteredRows: [],
   familyId: "backbone",
   parameterId: "alpha",
+  pdbPreset: null,
 };
 
 function el(id) {
@@ -584,11 +593,15 @@ function buildAllowedPidMask() {
   const mask = new Uint8Array(state.pdbManifest.maxPid + 1);
   let total = 0;
   for (const row of state.pdbManifest.rows) {
-    if (!passesCleanliness(row)) continue;
-    if (!passesDuplexGate(row)) continue;
-    if (!state.methods.has(row.method)) continue;
-    if (!passesResolution(row)) continue;
-    if (!state.forms.has(row.form)) continue;
+    if (state.pdbPreset === "md47") {
+      if (!MD_BDNA_46.has(row.pdbId)) continue;
+    } else {
+      if (!passesCleanliness(row)) continue;
+      if (!passesDuplexGate(row)) continue;
+      if (!state.methods.has(row.method)) continue;
+      if (!passesResolution(row)) continue;
+      if (!state.forms.has(row.form)) continue;
+    }
     mask[row.pid] = 1;
     total += 1;
   }
@@ -1067,6 +1080,18 @@ function updateMiniPanelSelection() {
 }
 
 function bindControls() {
+  renderSingleChoiceGroup("presetGroup", [
+    { id: "none", label: "Off" },
+    { id: "md47", label: "MD B-DNA (46)" },
+  ], state.pdbPreset || "none", (nextId) => {
+    state.pdbPreset = nextId === "none" ? null : nextId;
+    const dimmed = state.pdbPreset !== null;
+    for (const id of ["cleanlinessGroup","duplexGroup","methodGroup","resolutionGroup","formGroup"]) {
+      el(id).closest(".filter-cluster").classList.toggle("preset-dimmed", dimmed);
+    }
+    triggerFiltersAndPlot();
+  });
+
   renderSingleChoiceGroup("cleanlinessGroup", state.manifest.controls.cleanliness_options, state.cleanliness, (nextId) => {
     state.cleanliness = nextId;
     triggerFiltersAndPlot();
