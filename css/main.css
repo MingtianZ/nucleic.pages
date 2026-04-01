@@ -262,6 +262,12 @@ select {
   position: relative;
   display: inline-flex;
   align-items: center;
+  z-index: 1;
+}
+
+.help-wrap:hover,
+.help-wrap:focus-within {
+  z-index: 200;
 }
 
 .help-badge {
@@ -294,7 +300,7 @@ select {
   top: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 10;
+  z-index: 1000;
   min-width: 220px;
   max-width: 280px;
   padding: 9px 10px;
