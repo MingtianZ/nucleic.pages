@@ -1213,26 +1213,31 @@ function bindControls() {
 
   renderSingleChoiceGroup("circularModeGroup", CIRCULAR_MODE_OPTIONS, state.circularMode, (nextId) => {
     state.circularMode = nextId;
+    renderFilters();
     triggerPlot();
   });
 
   renderSingleChoiceGroup("smoothingSigmaGroup", SMOOTHING_SIGMA_OPTIONS, state.smoothingSigma, (nextId) => {
     state.smoothingSigma = nextId;
+    renderFilters();
     triggerPlot();
   });
 
   renderSingleChoiceGroup("displayScaleGroup", DISPLAY_SCALE_OPTIONS, state.displayScale, (nextId) => {
     state.displayScale = nextId;
+    renderFilters();
     triggerPlot();
   });
 
   renderSingleChoiceGroup("traceStyleGroup", TRACE_STYLE_OPTIONS, state.traceStyle, (nextId) => {
     state.traceStyle = nextId;
+    renderFilters();
     triggerPlot();
   });
 
   renderSingleChoiceGroup("binDetailGroup", BIN_DETAIL_OPTIONS, state.binDetail, (nextId) => {
     state.binDetail = nextId;
+    renderFilters();
     triggerPlot();
   });
 
