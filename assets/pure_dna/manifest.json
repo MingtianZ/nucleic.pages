@@ -1,7 +1,7 @@
 {
   "version": "pure_dna",
   "display_name": "Pure DNA Explorer",
-  "generated_at": "2026-03-25T17:24:41.114Z",
+  "generated_at": "2026-04-01T07:26:05.873Z",
   "universe": {
     "pdb_entries": 1830,
     "forms": {
@@ -348,6 +348,56 @@
         "tm",
         "sszp",
         "dp"
+      ],
+      "context_column": "base",
+      "context_label": "Base Type",
+      "context_options": [
+        {
+          "id": "A",
+          "label": "A"
+        },
+        {
+          "id": "C",
+          "label": "C"
+        },
+        {
+          "id": "G",
+          "label": "G"
+        },
+        {
+          "id": "T",
+          "label": "T"
+        }
+      ],
+      "secondary_context_column": "bi_bii",
+      "secondary_context_label": "Backbone State",
+      "secondary_context_options": [
+        {
+          "id": "BI",
+          "label": "BI"
+        },
+        {
+          "id": "BII",
+          "label": "BII"
+        },
+        {
+          "id": "BIII",
+          "label": "BIII"
+        },
+        {
+          "id": "Missing",
+          "label": "Missing"
+        }
+      ]
+    },
+    "custom_angles": {
+      "family_id": "custom_angles",
+      "display_name": "Custom Angles",
+      "file": "./custom_angles.tsv.gz",
+      "row_count": 53853,
+      "param_ids": [
+        "o4_c1_n",
+        "c2_c1_n"
       ],
       "context_column": "base",
       "context_label": "Base Type",
@@ -1295,6 +1345,28 @@
       "display_range_default": [
         0,
         6
+      ]
+    },
+    {
+      "param_id": "o4_c1_n",
+      "family_id": "custom_angles",
+      "display_name": "O4'-C1'-N9/N1",
+      "unit": "deg",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        80,
+        140
+      ]
+    },
+    {
+      "param_id": "c2_c1_n",
+      "family_id": "custom_angles",
+      "display_name": "C2'-C1'-N9/N1",
+      "unit": "deg",
+      "value_type": "numeric_linear",
+      "display_range_default": [
+        100,
+        160
       ]
     },
     {
