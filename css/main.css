@@ -109,10 +109,17 @@ h1 {
 }
 
 .card {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 14px;
   background: #fffdf7;
+  overflow: visible;
+}
+
+.card:hover,
+.card:focus-within {
+  z-index: 60;
 }
 
 .card.active {
@@ -202,8 +209,15 @@ select {
 }
 
 .filter-cluster {
+  position: relative;
   display: grid;
   gap: 8px;
+  overflow: visible;
+}
+
+.filter-cluster:hover,
+.filter-cluster:focus-within {
+  z-index: 80;
 }
 
 .filter-sections {
@@ -213,10 +227,17 @@ select {
 }
 
 .filter-section {
+  position: relative;
   border: 1px solid rgba(217, 205, 185, 0.85);
   border-radius: 18px;
   padding: 14px;
   background: rgba(255, 253, 247, 0.72);
+  overflow: visible;
+}
+
+.filter-section:hover,
+.filter-section:focus-within {
+  z-index: 40;
 }
 
 .filter-section-display {
@@ -503,8 +524,15 @@ select {
 }
 
 .stat-box {
+  position: relative;
   padding: 12px 14px;
   border-radius: 16px;
+  overflow: visible;
+}
+
+.stat-box:hover,
+.stat-box:focus-within {
+  z-index: 80;
 }
 
 .stat-label {
