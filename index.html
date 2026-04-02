@@ -267,9 +267,14 @@
             <h3>Filtered PDB Table</h3>
             <p>Open to inspect the PDB entries that currently pass the active PDB-level filters.</p>
           </div>
-          <button type="button" id="filteredToggle" class="toggle-btn collapse-toggle" aria-expanded="false">
-            Show filtered PDB entries
-          </button>
+          <div class="collapse-actions">
+            <button type="button" id="filteredCsvDownload" class="toggle-btn collapse-toggle">
+              Download current plot CSV
+            </button>
+            <button type="button" id="filteredToggle" class="toggle-btn collapse-toggle" aria-expanded="false">
+              Show filtered PDB entries
+            </button>
+          </div>
         </div>
         <div id="filteredDrawer" class="drawer-panel" hidden>
           <div class="drawer-toolbar">

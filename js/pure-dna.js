@@ -76,6 +76,7 @@ const state = {
   filteredTableOpen: false,
   filteredTablePage: 0,
   filteredRows: [],
+  lastPlotExport: null,
   familyId: "backbone",
   parameterId: "alpha",
   pdbPreset: null,
@@ -136,6 +137,32 @@ function currentDisplayScaleLabel() {
 function currentPresetLabel() {
   if (state.pdbPreset === "md47") return "MD B-DNA (46)";
   return "Off";
+}
+
+function labelForOption(options, id) {
+  return options.find((option) => option.id === id)?.label ?? id;
+}
+
+function selectionSummary(ids, allIds) {
+  const selected = [...ids];
+  if (!selected.length) return "none";
+  if (selected.length === allIds.length) return "all";
+  if (selected.length <= 4) return selected.join("+");
+  return `${selected.length}of${allIds.length}`;
+}
+
+function slugifyToken(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9.+-]+/g, "_")
+    .replaceAll(/^_+|_+$/g, "") || "na";
+}
+
+function csvEscape(value) {
+  const text = value === null || value === undefined ? "" : String(value);
+  if (!/[",\n]/.test(text)) return text;
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
 function currentBinCount(paramMeta) {
@@ -947,6 +974,16 @@ function nakbAtlasUrl(pdbId) {
   return `https://nakb.org/atlas=${encodeURIComponent(String(pdbId ?? "").toUpperCase())}`;
 }
 
+function displayValueForObservation(value, paramMeta, displayCut = 0, axisMode = "auto") {
+  if (!Number.isFinite(value)) return null;
+  if (!paramMeta.isCircular) return value;
+  const period = paramMeta.period ?? 360;
+  const wrapped = wrapCircular(value, period);
+  if (axisMode === "signed_180") return circularDisplayValue(wrapped, "signed_180", period);
+  if (axisMode === "wrap_360") return wrapped;
+  return wrapCircular(wrapped - displayCut, period);
+}
+
 function renderPdbTablePage(rows, bodyId, pageLabelId, prevId, nextId, pageIndex) {
   const tbody = el(bodyId);
   const pageLabel = el(pageLabelId);
@@ -1073,9 +1110,276 @@ function toggleFilteredDrawer() {
   else openFilteredDrawer();
 }
 
+function updateFilteredCsvButton() {
+  const button = el("filteredCsvDownload");
+  if (!button) return;
+  const snapshot = state.lastPlotExport;
+  const hasExport = Boolean(snapshot);
+  button.disabled = !hasExport;
+  if (!hasExport) {
+    button.title = "No current plot data available yet.";
+    return;
+  }
+  const familyLabel = snapshot.familyMeta.display_name;
+  const paramLabel = snapshot.paramMeta.display_name;
+  const observationCount = snapshot.accumulation.totalVisibleObservations;
+  button.title = `Download CSV for ${familyLabel} / ${paramLabel} with ${formatInt(observationCount)} plotted observations.`;
+}
+
+function currentFilterSnapshot() {
+  const allFormIds = formOptions().map((option) => option.id);
+  const allContextIds = currentContextOptions().map((option) => option.id);
+  const allBackboneStateIds = currentBackboneStateOptions().map((option) => option.id);
+  return {
+    familyId: state.familyId,
+    familyLabel: currentFamilyMeta().display_name,
+    parameterId: state.parameterId,
+    parameterLabel: currentParameterMeta().display_name,
+    parameterUnit: currentParameterMeta().unit ?? "",
+    preset: state.pdbPreset ?? "none",
+    presetLabel: currentPresetLabel(),
+    cleanliness: state.cleanliness,
+    cleanlinessLabel: labelForOption(state.manifest.controls.cleanliness_options, state.cleanliness),
+    duplexGate: state.duplexGate,
+    duplexGateLabel: labelForOption(state.manifest.controls.duplex_gate_options, state.duplexGate),
+    methods: [...state.methods],
+    methodsSummary: selectionSummary(state.methods, state.manifest.controls.method_options.map((item) => item.id)),
+    resolution: state.resolution,
+    resolutionLabel: labelForOption(state.manifest.controls.resolution_options, state.resolution),
+    forms: [...state.forms],
+    formsSummary: selectionSummary(state.forms, allFormIds),
+    contexts: [...state.contexts],
+    contextsSummary: selectionSummary(state.contexts, allContextIds),
+    backboneStates: [...state.backboneStates],
+    backboneStatesSummary: selectionSummary(state.backboneStates, allBackboneStateIds),
+    terminalPolicy: state.terminalPolicy,
+    terminalPolicyLabel: labelForOption(state.manifest.controls.terminal_policy_options, state.terminalPolicy),
+    circularMode: state.circularMode,
+    circularModeLabel: labelForOption(CIRCULAR_MODE_OPTIONS, state.circularMode),
+    smoothingSigma: state.smoothingSigma,
+    displayScale: state.displayScale,
+    displayScaleLabel: labelForOption(DISPLAY_SCALE_OPTIONS, state.displayScale),
+    traceStyle: state.traceStyle,
+    traceStyleLabel: labelForOption(TRACE_STYLE_OPTIONS, state.traceStyle),
+    binDetail: state.binDetail,
+    binDetailLabel: labelForOption(BIN_DETAIL_OPTIONS, state.binDetail),
+  };
+}
+
+function buildCurrentPlotCsvFilename(snapshot) {
+  const filters = snapshot.filters;
+  const parts = [
+    "pure_dna_plot",
+    slugifyToken(filters.familyId),
+    slugifyToken(filters.parameterId),
+    `preset-${slugifyToken(filters.preset)}`,
+    `clean-${slugifyToken(filters.cleanliness)}`,
+    `duplex-${slugifyToken(filters.duplexGate)}`,
+    `method-${slugifyToken(filters.methodsSummary)}`,
+    `res-${slugifyToken(filters.resolution)}`,
+    `form-${slugifyToken(filters.formsSummary)}`,
+    `ctx-${slugifyToken(filters.contextsSummary)}`,
+    `b123-${slugifyToken(filters.backboneStatesSummary)}`,
+    `term-${slugifyToken(filters.terminalPolicy)}`,
+    `axis-${slugifyToken(filters.circularMode)}`,
+    `sigma-${slugifyToken(filters.smoothingSigma)}`,
+    `scale-${slugifyToken(filters.displayScale)}`,
+    `trace-${slugifyToken(filters.traceStyle)}`,
+    `bins-${slugifyToken(filters.binDetail)}`,
+  ];
+  return `${parts.join("_")}.csv`;
+}
+
+function buildCurrentPlotCsv(snapshot) {
+  const columns = [
+    "record_type",
+    "meta_key",
+    "meta_value",
+    "series_form",
+    "series_form_label",
+    "curve_point_index",
+    "plot_x_display",
+    "plot_x_internal",
+    "plot_x_raw",
+    "plot_y",
+    "plot_y_mode",
+    "pid",
+    "pdb_id",
+    "pdb_form_nakb",
+    "pdb_method",
+    "pdb_resolution_angstrom",
+    "pdb_cleanliness",
+    "pdb_has_duplex_core",
+    "pdb_all_residues_paired",
+    "pdb_residue_count",
+    "pdb_het_names",
+    "observation_index",
+    "observation_value_raw",
+    "observation_value_display",
+    "observation_context",
+    "observation_backbone_state",
+    "observation_terminal_flag",
+  ];
+  const lines = [columns.join(",")];
+  const pushRow = (row) => {
+    lines.push(columns.map((column) => csvEscape(row[column] ?? "")).join(","));
+  };
+
+  const filters = snapshot.filters;
+  const metaEntries = [
+    ["family_id", filters.familyId],
+    ["family_label", filters.familyLabel],
+    ["parameter_id", filters.parameterId],
+    ["parameter_label", filters.parameterLabel],
+    ["parameter_unit", filters.parameterUnit],
+    ["pdb_preset", filters.preset],
+    ["pdb_preset_label", filters.presetLabel],
+    ["cleanliness_filter", filters.cleanlinessLabel],
+    ["duplex_gate_filter", filters.duplexGateLabel],
+    ["method_filter", filters.methods.join("|")],
+    ["resolution_filter", filters.resolutionLabel],
+    ["form_filter_ui", filters.forms.join("|")],
+    ["context_filter", filters.contexts.join("|")],
+    ["backbone_state_filter", filters.backboneStates.join("|")],
+    ["terminal_policy", filters.terminalPolicyLabel],
+    ["circular_axis", filters.circularModeLabel],
+    ["smoothing_sigma", filters.smoothingSigma],
+    ["display_scale", filters.displayScaleLabel],
+    ["trace_style", filters.traceStyleLabel],
+    ["histogram_detail", filters.binDetailLabel],
+    ["filtered_pdb_entries", snapshot.allowed.rows.length],
+    ["plotted_observations", snapshot.accumulation.totalVisibleObservations],
+    ["current_family_rows", snapshot.familyData.rowCount],
+    ["plot_x_range", `${snapshot.range[0]} .. ${snapshot.range[1]}`],
+  ];
+  for (const [key, value] of metaEntries) {
+    pushRow({
+      record_type: "meta",
+      meta_key: key,
+      meta_value: value,
+    });
+  }
+
+  for (const row of snapshot.allowed.rows) {
+    pushRow({
+      record_type: "filtered_pdb",
+      pid: row.pid,
+      pdb_id: String(row.pdbId).toUpperCase(),
+      pdb_form_nakb: FORM_META[row.form]?.label ?? row.form,
+      pdb_method: row.method,
+      pdb_resolution_angstrom: row.resolutionKnown && Number.isFinite(row.resolution) ? row.resolution.toFixed(2) : "",
+      pdb_cleanliness: cleanlinessLabel(row),
+      pdb_has_duplex_core: row.hasDuplexCore ? 1 : 0,
+      pdb_all_residues_paired: row.allResiduesPaired ? 1 : 0,
+      pdb_residue_count: row.residueCount,
+      pdb_het_names: row.hetNames,
+    });
+  }
+
+  for (const [formId, seriesData] of Object.entries(snapshot.accumulation.series)) {
+    if (!seriesData.summary.n) continue;
+    const label = FORM_META[formId]?.label ?? formId;
+    for (let index = 0; index < seriesData.x.length; index += 1) {
+      const internalX = seriesData.x[index];
+      const rawX = snapshot.paramMeta.isCircular
+        ? (seriesData.hoverAngles?.[index] ?? internalX)
+        : internalX;
+      const displayX = snapshot.paramMeta.isCircular
+        ? (seriesData.axisMode === "signed_180"
+            ? (seriesData.hoverDisplayAngles?.[index] ?? internalX)
+            : internalX)
+        : internalX;
+      pushRow({
+        record_type: "curve_point",
+        series_form: formId,
+        series_form_label: label,
+        curve_point_index: index,
+        plot_x_display: Number.isFinite(displayX) ? displayX.toFixed(6) : "",
+        plot_x_internal: Number.isFinite(internalX) ? internalX.toFixed(6) : "",
+        plot_x_raw: Number.isFinite(rawX) ? rawX.toFixed(6) : "",
+        plot_y: Number.isFinite(seriesData.y[index]) ? seriesData.y[index].toFixed(10) : "",
+        plot_y_mode: currentDisplayScaleLabel(),
+      });
+    }
+  }
+
+  const seriesIds = selectedFormIds();
+  let observationIndex = 0;
+  for (const formId of seriesIds) {
+    const metaRows = snapshot.allowedRowsByForm?.[formId] ?? [];
+    for (const row of metaRows) {
+      const start = snapshot.familyData.pidStart[row.pid];
+      const count = snapshot.familyData.pidCount[row.pid];
+      if (start < 0 || !count) continue;
+      for (let offset = 0; offset < count; offset += 1) {
+        const rowIndex = start + offset;
+        if (!rowPassesObservationFilters(snapshot.familyData, rowIndex)) continue;
+        const value = snapshot.familyData.values[snapshot.paramMeta.param_id][rowIndex];
+        if (!Number.isFinite(value)) continue;
+        const contextValue = snapshot.familyData.context?.[rowIndex]
+          || snapshot.familyData.contextEmptyValue
+          || "";
+        const backboneState = snapshot.familyData.secondaryContext?.[rowIndex]
+          || snapshot.familyData.secondaryContextEmptyValue
+          || "";
+        const displayValue = displayValueForObservation(
+          value,
+          snapshot.paramMeta,
+          snapshot.accumulation.displayCut,
+          snapshot.accumulation.axisMode,
+        );
+        pushRow({
+          record_type: "observation",
+          series_form: formId,
+          series_form_label: FORM_META[formId]?.label ?? formId,
+          pid: row.pid,
+          pdb_id: String(row.pdbId).toUpperCase(),
+          pdb_form_nakb: FORM_META[row.form]?.label ?? row.form,
+          pdb_method: row.method,
+          pdb_resolution_angstrom: row.resolutionKnown && Number.isFinite(row.resolution) ? row.resolution.toFixed(2) : "",
+          pdb_cleanliness: cleanlinessLabel(row),
+          pdb_has_duplex_core: row.hasDuplexCore ? 1 : 0,
+          pdb_all_residues_paired: row.allResiduesPaired ? 1 : 0,
+          pdb_residue_count: row.residueCount,
+          pdb_het_names: row.hetNames,
+          observation_index: observationIndex,
+          observation_value_raw: value.toFixed(6),
+          observation_value_display: Number.isFinite(displayValue) ? displayValue.toFixed(6) : "",
+          observation_context: contextValue,
+          observation_backbone_state: backboneState,
+          observation_terminal_flag: snapshot.familyData.edgeFlag[rowIndex],
+        });
+        observationIndex += 1;
+      }
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function downloadCurrentPlotCsv() {
+  const snapshot = state.lastPlotExport;
+  if (!snapshot) return;
+  const csvText = buildCurrentPlotCsv(snapshot);
+  const filename = buildCurrentPlotCsvFilename(snapshot);
+  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function bindFilteredDrawer() {
+  updateFilteredCsvButton();
   el("filteredToggle").addEventListener("click", () => {
     toggleFilteredDrawer();
+  });
+  el("filteredCsvDownload").addEventListener("click", () => {
+    downloadCurrentPlotCsv();
   });
   el("filteredPrev").addEventListener("click", () => {
     if (!state.filteredTableOpen || state.filteredTablePage === 0) return;
@@ -1487,6 +1791,7 @@ function updateStats(allowed, familyData, accumulation) {
   el("currentContextScope").textContent = selectedContextsLabel();
   state.filteredRows = allowed.rows;
   if (state.filteredTableOpen) renderFilteredTablePage();
+  updateFilteredCsvButton();
 }
 
 function buildLayout(paramMeta, range, displayCut = 0, axisMode = "auto") {
@@ -1538,6 +1843,7 @@ async function renderPlot(options = {}) {
   const requestedParameterId = state.parameterId;
   const familyData = await ensureFamilyLoaded(requestedFamilyId);
   if (isStaleRender(renderRevision)) return;
+  const familyMeta = state.manifest.families[requestedFamilyId];
   const paramMeta = currentParameterMeta(requestedParameterId);
   if (!paramMeta || !familyData.values[requestedParameterId]) return;
   const allowed = buildAllowedPidMask();
@@ -1550,6 +1856,16 @@ async function renderPlot(options = {}) {
     .map(([formId, seriesData]) => buildTrace(formId, seriesData, paramMeta));
 
   if (isStaleRender(renderRevision)) return;
+  state.lastPlotExport = {
+    familyData,
+    familyMeta,
+    paramMeta,
+    allowed,
+    allowedRowsByForm,
+    accumulation,
+    range,
+    filters: currentFilterSnapshot(),
+  };
   updateStats(allowed, familyData, accumulation);
   renderSummaryCards(accumulation.series, paramMeta);
   if (skipOverview) updateMiniPanelSelection();
@@ -1560,6 +1876,7 @@ async function renderPlot(options = {}) {
     const plotNode = el("plot");
     if (plotNode.data) Plotly.purge(plotNode);
     plotNode.innerHTML = `<div class="empty-state">No observations match the current filter stack.</div>`;
+    updateFilteredCsvButton();
     return;
   }
 

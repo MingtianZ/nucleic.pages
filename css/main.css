@@ -105,6 +105,13 @@ h1 {
   align-items: center;
 }
 
+.collapse-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .collapse-toggle {
   white-space: nowrap;
 }
@@ -374,6 +381,14 @@ select {
 .toggle-btn:hover {
   border-color: rgba(23, 74, 126, 0.38);
   transform: translateY(-1px);
+}
+
+.toggle-btn:disabled,
+.toggle-btn:disabled:hover {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  border-color: var(--line);
 }
 
 .toggle-btn.active {
