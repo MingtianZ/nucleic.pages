@@ -1167,27 +1167,19 @@ function currentFilterSnapshot() {
 }
 
 function buildCurrentPlotCsvFilename(snapshot) {
-  const filters = snapshot.filters;
-  const parts = [
-    "pure_dna_plot",
-    slugifyToken(filters.familyId),
-    slugifyToken(filters.parameterId),
-    `preset-${slugifyToken(filters.preset)}`,
-    `clean-${slugifyToken(filters.cleanliness)}`,
-    `duplex-${slugifyToken(filters.duplexGate)}`,
-    `method-${slugifyToken(filters.methodsSummary)}`,
-    `res-${slugifyToken(filters.resolution)}`,
-    `form-${slugifyToken(filters.formsSummary)}`,
-    `ctx-${slugifyToken(filters.contextsSummary)}`,
-    `b123-${slugifyToken(filters.backboneStatesSummary)}`,
-    `term-${slugifyToken(filters.terminalPolicy)}`,
-    `axis-${slugifyToken(filters.circularMode)}`,
-    `sigma-${slugifyToken(filters.smoothingSigma)}`,
-    `scale-${slugifyToken(filters.displayScale)}`,
-    `trace-${slugifyToken(filters.traceStyle)}`,
-    `bins-${slugifyToken(filters.binDetail)}`,
-  ];
-  return `${parts.join("_")}.csv`;
+  const parameter = slugifyToken(snapshot.filters.parameterId);
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  const timestamp = [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    "_",
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds()),
+  ].join("");
+  return `${parameter}_${timestamp}.csv`;
 }
 
 function buildCurrentPlotCsv(snapshot) {
