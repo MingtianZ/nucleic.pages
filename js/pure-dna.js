@@ -1183,10 +1183,7 @@ function buildCurrentPlotCsvFilename(snapshot) {
 }
 
 function buildCurrentPlotCsv(snapshot) {
-  const familyMeta = snapshot.familyMeta;
   const valueColumn = snapshot.filters.parameterId;
-  const contextColumn = familyMeta.context_column ?? null;
-  const secondaryContextColumn = familyMeta.secondary_context_column ?? null;
   const columns = [
     valueColumn,
     "pdb_id",
@@ -1196,10 +1193,10 @@ function buildCurrentPlotCsv(snapshot) {
     "cleanliness",
     "het_names",
     "residue_count",
+    "sequence_context",
+    "backbone_state",
+    "terminal_flag",
   ];
-  if (contextColumn) columns.push(contextColumn);
-  if (secondaryContextColumn) columns.push(secondaryContextColumn);
-  columns.push("terminal_flag");
   const lines = [columns.join(",")];
   const pushRow = (row) => {
     lines.push(columns.map((column) => csvEscape(row[column] ?? "")).join(","));
@@ -1238,10 +1235,10 @@ function buildCurrentPlotCsv(snapshot) {
           cleanliness: cleanlinessLabel(row),
           het_names: row.hetNames,
           residue_count: row.residueCount,
+          sequence_context: contextValue,
+          backbone_state: backboneState,
           terminal_flag: snapshot.familyData.edgeFlag[rowIndex],
         };
-        if (contextColumn) exportRow[contextColumn] = contextValue;
-        if (secondaryContextColumn) exportRow[secondaryContextColumn] = backboneState;
         pushRow(exportRow);
       }
     }
