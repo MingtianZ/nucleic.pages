@@ -1840,11 +1840,8 @@ const JOINT_PALETTE_OPTIONS = [
   { id: "warm", label: "Warm" },
   { id: "viridis", label: "Viridis" },
   { id: "cividis", label: "Cividis" },
-  { id: "magma", label: "Magma" },
-  { id: "inferno", label: "Inferno" },
-  { id: "plasma", label: "Plasma" },
-  { id: "turbo", label: "Turbo" },
-  { id: "blues", label: "Blues" },
+  { id: "ocean", label: "Ocean" },
+  { id: "forest", label: "Forest" },
   { id: "greys", label: "Greys" },
 ];
 
@@ -1876,11 +1873,8 @@ const JOINT_PALETTE_MAP = {
   warm: "YlOrRd",
   viridis: "Viridis",
   cividis: "Cividis",
-  magma: "Magma",
-  inferno: "Inferno",
-  plasma: "Plasma",
-  turbo: "Turbo",
-  blues: "Blues",
+  ocean: "YlGnBu",
+  forest: "Greens",
   greys: "Greys",
 };
 
