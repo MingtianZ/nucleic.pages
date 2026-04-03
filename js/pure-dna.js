@@ -2314,6 +2314,7 @@ async function renderJointPlot() {
   const sigma = parseFloat(state.smoothingSigma) || 0;
   grid = smooth2d(grid, binsX, binsY, sigma, xMeta.isCircular, yMeta.isCircular);
   const intensity = normalizeJointGrid(grid, binsX, binsY, xRange, yRange);
+  const logFloor = 1e-8;
 
   let minPositive = Infinity;
   let maxIntensity = 0;
@@ -2332,7 +2333,7 @@ async function renderJointPlot() {
       const val = intensity[row * binsX + col];
       rawRow[col] = val;
       if (state.jointColorScale === "log") {
-        rowArr[col] = val > 0 ? Math.log10(val) : null;
+        rowArr[col] = Math.log10(Math.max(val, logFloor));
       } else {
         rowArr[col] = val;
       }
@@ -2411,9 +2412,9 @@ async function renderJointPlot() {
   if (state.jointColorScale === "linear") {
     trace.zmin = 0;
     trace.zmax = maxIntensity > 0 ? maxIntensity : undefined;
-  } else if (Number.isFinite(minPositive) && minPositive < Infinity && maxIntensity > 0) {
-    trace.zmin = Math.log10(minPositive);
-    trace.zmax = Math.log10(maxIntensity);
+  } else if (maxIntensity > 0) {
+    trace.zmin = Math.log10(logFloor);
+    trace.zmax = Math.log10(Math.max(maxIntensity, logFloor));
   }
 
   const layout = {
