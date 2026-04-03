@@ -80,6 +80,9 @@ const state = {
   familyId: "backbone",
   parameterId: "alpha",
   pdbPreset: null,
+  family2Id: null,
+  parameter2Id: null,
+  jointColorScale: "log",
 };
 
 function el(id) {
@@ -115,6 +118,7 @@ function triggerFiltersAndPlot() {
 
 function triggerPlot(options = {}) {
   renderPlot(options).catch(renderInteractionError);
+  renderJointPlot().catch(renderInteractionError);
 }
 
 function formatInt(value) {
@@ -1463,6 +1467,8 @@ function bindControls() {
 function renderFilters() {
   bindControls();
   syncSelectors();
+  syncJointSelectors();
+  bindJointControls();
 }
 
 async function ensureFamilyLoaded(familyId) {
@@ -1794,6 +1800,376 @@ async function renderPlot(options = {}) {
 async function renderFiltersAndPlot() {
   renderFilters();
   await renderPlot();
+  await renderJointPlot();
+}
+
+// ---------------------------------------------------------------------------
+// 2D Joint Analysis
+// ---------------------------------------------------------------------------
+
+const JOINT_COLOR_SCALE_OPTIONS = [
+  { id: "log", label: "Log" },
+  { id: "linear", label: "Linear" },
+];
+
+const FAMILY_LEVEL_GROUPS = {
+  residue: ["backbone", "pseudo_torsion", "sugar_torsion", "pucker", "custom_angles"],
+  pair: ["base_pair", "pair_quality"],
+  step: ["step", "helical", "step_position", "same_strand", "helix_radius"],
+};
+
+function familyLevelOf(familyId) {
+  for (const [level, ids] of Object.entries(FAMILY_LEVEL_GROUPS)) {
+    if (ids.includes(familyId)) return level;
+  }
+  return null;
+}
+
+function compatibleFamilyIds(primaryFamilyId) {
+  const level = familyLevelOf(primaryFamilyId);
+  if (!level) return [];
+  return FAMILY_LEVEL_GROUPS[level].filter((id) => state.manifest.families[id]);
+}
+
+function syncJointSelectors() {
+  const family2Select = el("family2Select");
+  const parameter2Select = el("parameter2Select");
+  family2Select.innerHTML = "";
+  parameter2Select.innerHTML = "";
+
+  const compatible = compatibleFamilyIds(state.familyId);
+
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = "-- none --";
+  family2Select.appendChild(emptyOption);
+
+  for (const fid of compatible) {
+    const meta = state.manifest.families[fid];
+    const option = document.createElement("option");
+    option.value = fid;
+    option.textContent = meta.display_name;
+    option.selected = fid === state.family2Id;
+    family2Select.appendChild(option);
+  }
+
+  if (!state.family2Id || !compatible.includes(state.family2Id)) {
+    state.family2Id = null;
+    state.parameter2Id = null;
+    family2Select.value = "";
+  }
+
+  if (state.family2Id) {
+    const f2Meta = state.manifest.families[state.family2Id];
+    for (const paramId of f2Meta.param_ids) {
+      const pMeta = state.parameterMetaById[paramId];
+      const option = document.createElement("option");
+      option.value = paramId;
+      option.textContent = pMeta.display_name;
+      option.selected = paramId === state.parameter2Id;
+      parameter2Select.appendChild(option);
+    }
+    if (!state.parameter2Id || !f2Meta.param_ids.includes(state.parameter2Id)) {
+      state.parameter2Id = f2Meta.param_ids[0];
+      parameter2Select.value = state.parameter2Id;
+    }
+  }
+}
+
+function bindJointControls() {
+  renderSingleChoiceGroup("jointColorScaleGroup", JOINT_COLOR_SCALE_OPTIONS, state.jointColorScale, (nextId) => {
+    state.jointColorScale = nextId;
+    renderJointPlot().catch(renderInteractionError);
+  });
+
+  el("family2Select").onchange = (event) => {
+    const value = event.target.value;
+    state.family2Id = value || null;
+    state.parameter2Id = null;
+    syncJointSelectors();
+    renderJointPlot().catch(renderInteractionError);
+  };
+
+  el("parameter2Select").onchange = (event) => {
+    state.parameter2Id = event.target.value || null;
+    renderJointPlot().catch(renderInteractionError);
+  };
+}
+
+function collectJointPairs(familyData1, paramId1, familyData2, paramId2, allowedPidMask) {
+  const sameFamilyData = familyData1 === familyData2;
+  const xs = [];
+  const ys = [];
+  const pdbSet = new Set();
+
+  if (sameFamilyData) {
+    const vals1 = familyData1.values[paramId1];
+    const vals2 = familyData1.values[paramId2];
+    for (let rowIndex = 0; rowIndex < familyData1.rowCount; rowIndex += 1) {
+      const pid = familyData1.pid[rowIndex];
+      if (!allowedPidMask[pid]) continue;
+      if (!rowPassesObservationFilters(familyData1, rowIndex)) continue;
+      const x = vals1[rowIndex];
+      const y = vals2[rowIndex];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      xs.push(x);
+      ys.push(y);
+      pdbSet.add(pid);
+    }
+  } else {
+    const lookup = new Map();
+    const vals1 = familyData1.values[paramId1];
+    for (let rowIndex = 0; rowIndex < familyData1.rowCount; rowIndex += 1) {
+      const pid = familyData1.pid[rowIndex];
+      if (!allowedPidMask[pid]) continue;
+      if (!rowPassesObservationFilters(familyData1, rowIndex)) continue;
+      const x = vals1[rowIndex];
+      if (!Number.isFinite(x)) continue;
+      const label = familyData1.siteLabel ? familyData1.siteLabel[rowIndex] : String(rowIndex - familyData1.pidStart[pid]);
+      const key = pid + "|" + label;
+      lookup.set(key, x);
+    }
+
+    const vals2 = familyData2.values[paramId2];
+    for (let rowIndex = 0; rowIndex < familyData2.rowCount; rowIndex += 1) {
+      const pid = familyData2.pid[rowIndex];
+      if (!allowedPidMask[pid]) continue;
+      const y = vals2[rowIndex];
+      if (!Number.isFinite(y)) continue;
+      const label = familyData2.siteLabel ? familyData2.siteLabel[rowIndex] : String(rowIndex - familyData2.pidStart[pid]);
+      const key = pid + "|" + label;
+      const x = lookup.get(key);
+      if (x === undefined) continue;
+      xs.push(x);
+      ys.push(y);
+      pdbSet.add(pid);
+    }
+  }
+
+  return { xs, ys, n: xs.length, pdbCount: pdbSet.size };
+}
+
+function bin2d(xs, ys, xMeta, yMeta, xRange, yRange, binsX, binsY) {
+  const grid = new Float64Array(binsX * binsY);
+  const xPeriod = xMeta.isCircular ? (xMeta.period ?? 360) : null;
+  const yPeriod = yMeta.isCircular ? (yMeta.period ?? 360) : null;
+  const xSpan = xRange[1] - xRange[0];
+  const ySpan = yRange[1] - yRange[0];
+
+  for (let i = 0; i < xs.length; i += 1) {
+    let x = xs[i];
+    let y = ys[i];
+    if (xPeriod) x = wrapCircular(x, xPeriod);
+    if (yPeriod) y = wrapCircular(y, yPeriod);
+
+    let bx = Math.floor(((x - xRange[0]) / xSpan) * binsX);
+    let by = Math.floor(((y - yRange[0]) / ySpan) * binsY);
+    if (bx < 0) bx = 0;
+    if (bx >= binsX) bx = binsX - 1;
+    if (by < 0) by = 0;
+    if (by >= binsY) by = binsY - 1;
+    grid[by * binsX + bx] += 1;
+  }
+
+  return grid;
+}
+
+function smooth2d(grid, binsX, binsY, sigma, xCircular, yCircular) {
+  if (!(sigma > 0)) return grid;
+  const radius = Math.max(2, Math.ceil(3 * sigma));
+  const kernel = gaussianKernel(radius, sigma);
+
+  const temp = new Float64Array(binsX * binsY);
+  for (let row = 0; row < binsY; row += 1) {
+    for (let col = 0; col < binsX; col += 1) {
+      let acc = 0;
+      for (let offset = -radius; offset <= radius; offset += 1) {
+        let j = col + offset;
+        if (xCircular) {
+          j = (j + binsX) % binsX;
+        } else {
+          if (j < 0 || j >= binsX) continue;
+        }
+        acc += grid[row * binsX + j] * kernel[offset + radius];
+      }
+      temp[row * binsX + col] = acc;
+    }
+  }
+
+  const result = new Float64Array(binsX * binsY);
+  for (let col = 0; col < binsX; col += 1) {
+    for (let row = 0; row < binsY; row += 1) {
+      let acc = 0;
+      for (let offset = -radius; offset <= radius; offset += 1) {
+        let j = row + offset;
+        if (yCircular) {
+          j = (j + binsY) % binsY;
+        } else {
+          if (j < 0 || j >= binsY) continue;
+        }
+        acc += temp[j * binsX + col] * kernel[offset + radius];
+      }
+      result[row * binsX + col] = acc;
+    }
+  }
+
+  return result;
+}
+
+function computeCorrelation(xs, ys) {
+  const n = xs.length;
+  if (n < 3) return { r: NaN, r2: NaN };
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+  for (let i = 0; i < n; i += 1) {
+    sumX += xs[i];
+    sumY += ys[i];
+    sumXY += xs[i] * ys[i];
+    sumX2 += xs[i] * xs[i];
+    sumY2 += ys[i] * ys[i];
+  }
+  const denom = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+  if (denom === 0) return { r: NaN, r2: NaN };
+  const r = (n * sumXY - sumX * sumY) / denom;
+  return { r, r2: r * r };
+}
+
+function jointBinCount(paramMeta) {
+  const standard = paramMeta.isCircular ? 72 : 48;
+  if (state.binDetail !== "fine") return standard;
+  return paramMeta.isCircular ? 144 : 96;
+}
+
+async function renderJointPlot() {
+  if (!state.family2Id || !state.parameter2Id) {
+    const plotNode = el("jointPlot");
+    if (plotNode.data) Plotly.purge(plotNode);
+    plotNode.innerHTML = `<div class="empty-state">Select a second parameter above to generate a joint distribution.</div>`;
+    el("jointStats").hidden = true;
+    return;
+  }
+
+  const xFamilyId = state.familyId;
+  const xParamId = state.parameterId;
+  const yFamilyId = state.family2Id;
+  const yParamId = state.parameter2Id;
+
+  const [familyData1, familyData2] = await Promise.all([
+    ensureFamilyLoaded(xFamilyId),
+    ensureFamilyLoaded(yFamilyId),
+  ]);
+
+  const xMeta = currentParameterMeta(xParamId);
+  const yMeta = currentParameterMeta(yParamId);
+  if (!xMeta || !yMeta) return;
+  if (!familyData1.values[xParamId] || !familyData2.values[yParamId]) return;
+
+  const allowed = buildAllowedPidMask();
+  const pairs = collectJointPairs(familyData1, xParamId, familyData2, yParamId, allowed.mask);
+
+  if (pairs.n === 0) {
+    const plotNode = el("jointPlot");
+    if (plotNode.data) Plotly.purge(plotNode);
+    plotNode.innerHTML = `<div class="empty-state">No matched observations for the current filter stack.</div>`;
+    el("jointStats").hidden = true;
+    return;
+  }
+
+  const xRange = computeEffectiveRange(xMeta, familyData1, xParamId, allowed.mask);
+  const yRange = computeEffectiveRange(yMeta, familyData2, yParamId, allowed.mask);
+
+  const binsX = jointBinCount(xMeta);
+  const binsY = jointBinCount(yMeta);
+
+  let grid = bin2d(pairs.xs, pairs.ys, xMeta, yMeta, xRange, yRange, binsX, binsY);
+
+  const sigma = parseFloat(state.smoothingSigma) || 0;
+  grid = smooth2d(grid, binsX, binsY, sigma, xMeta.isCircular, yMeta.isCircular);
+
+  const zData = [];
+  for (let row = 0; row < binsY; row += 1) {
+    const rowArr = new Array(binsX);
+    for (let col = 0; col < binsX; col += 1) {
+      const val = grid[row * binsX + col];
+      if (state.jointColorScale === "log") {
+        rowArr[col] = val > 0 ? Math.log10(val + 1) : 0;
+      } else {
+        rowArr[col] = val;
+      }
+    }
+    zData.push(rowArr);
+  }
+
+  const xCenters = [];
+  const xSpan = xRange[1] - xRange[0];
+  for (let i = 0; i < binsX; i += 1) {
+    xCenters.push(xRange[0] + (i + 0.5) * (xSpan / binsX));
+  }
+  const yCenters = [];
+  const ySpan = yRange[1] - yRange[0];
+  for (let i = 0; i < binsY; i += 1) {
+    yCenters.push(yRange[0] + (i + 0.5) * (ySpan / binsY));
+  }
+
+  const xTitle = xMeta.unit ? `${xMeta.display_name} (${xMeta.unit})` : xMeta.display_name;
+  const yTitle = yMeta.unit ? `${yMeta.display_name} (${yMeta.unit})` : yMeta.display_name;
+
+  const buildAxisConfig = (meta, range) => {
+    if (meta.isCircular) {
+      const ticks = buildCircularTickSpec(meta.period ?? 360, 0, false, state.circularMode === "auto" ? "wrap_360" : state.circularMode);
+      return {
+        range: [0, meta.period ?? 360],
+        tickvals: ticks.tickvals,
+        ticktext: ticks.ticktext,
+        automargin: true,
+        zeroline: false,
+      };
+    }
+    return { range, automargin: true, zeroline: false };
+  };
+
+  const trace = {
+    x: xCenters,
+    y: yCenters,
+    z: zData,
+    type: "heatmap",
+    colorscale: "YlOrRd",
+    zsmooth: false,
+    hovertemplate: `${xMeta.display_name}: %{x:.2f}<br>${yMeta.display_name}: %{y:.2f}<br>Intensity: %{z:.2f}<extra></extra>`,
+    colorbar: {
+      title: { text: state.jointColorScale === "log" ? "log₁₀(count+1)" : "Count", side: "right" },
+      thickness: 14,
+      len: 0.9,
+    },
+  };
+
+  const layout = {
+    margin: { l: 64, r: 22, t: 28, b: 72, pad: 4 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(255,253,247,0.65)",
+    xaxis: { title: { text: xTitle, standoff: 12 }, ...buildAxisConfig(xMeta, xRange) },
+    yaxis: { title: { text: yTitle, standoff: 12 }, ...buildAxisConfig(yMeta, yRange) },
+  };
+
+  const plotNode = el("jointPlot");
+  const canReact = Array.isArray(plotNode.data);
+  if (!canReact) plotNode.innerHTML = "";
+  const config = { responsive: true, displayModeBar: false };
+  if (canReact) {
+    await Plotly.react("jointPlot", [trace], layout, config);
+  } else {
+    await Plotly.newPlot("jointPlot", [trace], layout, config);
+  }
+
+  const corr = computeCorrelation(pairs.xs, pairs.ys);
+  el("jointMatchedN").textContent = formatInt(pairs.n);
+  el("jointMatchedPdbs").textContent = formatInt(pairs.pdbCount);
+  el("jointPearsonR").textContent = Number.isFinite(corr.r) ? corr.r.toFixed(4) : "-";
+  el("jointRSquared").textContent = Number.isFinite(corr.r2) ? corr.r2.toFixed(4) : "-";
+  el("jointStats").hidden = false;
+}
+
+function triggerJointPlot() {
+  renderJointPlot().catch(renderInteractionError);
 }
 
 async function boot() {

@@ -321,6 +321,88 @@
         </div>
         <div id="familyOverview" class="small-multiple-grid"></div>
       </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>2D Joint Analysis</h2>
+          <p>
+            Select a second parameter to generate a joint distribution heatmap.
+            Only families at the same observation level can be paired.
+            Observations are matched by PDB entry and site label.
+          </p>
+        </div>
+
+        <div class="controls">
+          <label>
+            Family 2
+            <select id="family2Select"></select>
+          </label>
+          <label>
+            Parameter 2
+            <select id="parameter2Select"></select>
+          </label>
+        </div>
+
+        <div class="joint-controls">
+          <div class="filter-cluster">
+            <span class="cluster-title label-with-help">
+              <span>Color Scale</span>
+              <span class="help-wrap">
+                <button type="button" class="help-badge" aria-label="Explain Color Scale">?</button>
+                <span class="help-tooltip">Log scale avoids dominant peaks washing out fine structure in the heatmap.</span>
+              </span>
+            </span>
+            <div id="jointColorScaleGroup" class="toggle-group"></div>
+          </div>
+        </div>
+
+        <div id="jointPlot" class="plot-panel">
+          <div class="empty-state">Select a second parameter above to generate a joint distribution.</div>
+        </div>
+
+        <div class="stats-strip" id="jointStats" hidden>
+          <div class="stat-box">
+            <span class="stat-label label-with-help">
+              <span>Matched observations</span>
+              <span class="help-wrap">
+                <button type="button" class="help-badge" aria-label="Explain Matched observations">?</button>
+                <span class="help-tooltip">Rows where the x parameter and y parameter both have finite values for the same site in the same PDB entry.</span>
+              </span>
+            </span>
+            <span class="stat-value" id="jointMatchedN">-</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label label-with-help">
+              <span>Matched PDBs</span>
+              <span class="help-wrap">
+                <button type="button" class="help-badge" aria-label="Explain Matched PDBs">?</button>
+                <span class="help-tooltip">Number of unique PDB entries contributing to the matched observations.</span>
+              </span>
+            </span>
+            <span class="stat-value" id="jointMatchedPdbs">-</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label label-with-help">
+              <span>Pearson r</span>
+              <span class="help-wrap">
+                <button type="button" class="help-badge" aria-label="Explain Pearson r">?</button>
+                <span class="help-tooltip">Linear correlation coefficient computed from the displayed x/y values. Values near +1 or -1 indicate strong linear association.</span>
+              </span>
+            </span>
+            <span class="stat-value" id="jointPearsonR">-</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label label-with-help">
+              <span>R&sup2;</span>
+              <span class="help-wrap">
+                <button type="button" class="help-badge" aria-label="Explain R-squared">?</button>
+                <span class="help-tooltip">Squared Pearson correlation coefficient. Represents the fraction of variance in one parameter explained by a linear model of the other.</span>
+              </span>
+            </span>
+            <span class="stat-value" id="jointRSquared">-</span>
+          </div>
+        </div>
+      </section>
     </div>
 
     <script type="module" src="./js/pure-dna.js"></script>
