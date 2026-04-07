@@ -1251,14 +1251,8 @@ function buildCurrentPlotCsv(snapshot) {
         const backboneState = snapshot.familyData.secondaryContext?.[rowIndex]
           || snapshot.familyData.secondaryContextEmptyValue
           || "";
-        const displayValue = displayValueForObservation(
-          value,
-          snapshot.paramMeta,
-          snapshot.accumulation.displayCut,
-          snapshot.accumulation.axisMode,
-        );
         const exportRow = {
-          [valueColumn]: Number.isFinite(displayValue) ? displayValue.toFixed(6) : "",
+          [valueColumn]: Number.isFinite(value) ? value.toFixed(6) : "",
           pdb_id: String(row.pdbId).toUpperCase(),
           site_label: snapshot.familyData.siteLabel?.[rowIndex] || "",
           form_nakb: FORM_META[row.form]?.label ?? row.form,
