@@ -64,6 +64,12 @@ const JOINT_CONTOUR_LABEL_OPTIONS = [
   { id: "on", label: "On" },
 ];
 
+const JOINT_CONTOUR_WIDTH_OPTIONS = [
+  { id: "thin", label: "Thin", factor: 0.8 },
+  { id: "standard", label: "Standard", factor: 1.0 },
+  { id: "thick", label: "Thick", factor: 1.5 },
+];
+
 const MD_BDNA_46 = new Set([
   "109d","126d","127d","158d","196d","1bna","1d23","1d43","1d44","1d45",
   "1d46","1d56","1d63","1dcv","1dou","1fq2","1jgr","1m6f","1s2r","2b0k",
@@ -111,6 +117,7 @@ const state = {
   jointBackboneStates: new Set(),
   jointPlotType: "heatmap",
   jointContourLabels: "off",
+  jointContourWidth: "standard",
   jointColorScale: "log",
   jointPalette: "warm",
 };
@@ -2030,8 +2037,13 @@ function bindJointControls() {
   const residueSideCluster = el("jointResidueSideCluster");
   const residueContextCluster = el("jointResidueContextCluster");
   const residueBackboneCluster = el("jointResidueBackboneCluster");
+  const contourLabelsCluster = el("jointContourLabelsCluster");
+  const contourWidthCluster = el("jointContourWidthCluster");
   const showPairResidueControls = state.jointJoinMode === "pair_residue";
+  const showContourControls = state.jointPlotType !== "heatmap";
   residueSideCluster.hidden = !showPairResidueControls;
+  contourLabelsCluster.hidden = !showContourControls;
+  contourWidthCluster.hidden = !showContourControls;
 
   renderSingleChoiceGroup("jointResidueSideGroup", JOINT_RESIDUE_SIDE_OPTIONS, state.jointResidueSide, (nextId) => {
     state.jointResidueSide = nextId;
@@ -2046,6 +2058,11 @@ function bindJointControls() {
   });
   renderSingleChoiceGroup("jointContourLabelsGroup", JOINT_CONTOUR_LABEL_OPTIONS, state.jointContourLabels, (nextId) => {
     state.jointContourLabels = nextId;
+    renderFilters();
+    renderJointPlot().catch(renderJointInteractionError);
+  });
+  renderSingleChoiceGroup("jointContourWidthGroup", JOINT_CONTOUR_WIDTH_OPTIONS, state.jointContourWidth, (nextId) => {
+    state.jointContourWidth = nextId;
     renderFilters();
     renderJointPlot().catch(renderJointInteractionError);
   });
@@ -2457,6 +2474,10 @@ function jointIntensityLabel() {
   return state.displayScale === "density" ? "Density (smoothed)" : "Probability (smoothed)";
 }
 
+function currentJointContourWidthFactor() {
+  return JOINT_CONTOUR_WIDTH_OPTIONS.find((item) => item.id === state.jointContourWidth)?.factor ?? 1.0;
+}
+
 function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTemplate, maxIntensity, logFloor, intensityLabel) {
   const colorscale = JOINT_PALETTE_MAP[state.jointPalette] ?? "YlOrRd";
   const zmin = state.jointColorScale === "linear" ? 0 : Math.log10(logFloor);
@@ -2499,13 +2520,14 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
       showlabels: state.jointContourLabels === "on",
     },
   };
+  const contourWidthFactor = currentJointContourWidthFactor();
 
   switch (state.jointPlotType) {
     case "contour":
       return [{
         ...contourTrace,
         contours: { ...contourTrace.contours, coloring: "none" },
-        line: { color: "#182233", width: 1.1 },
+        line: { color: "#182233", width: 1.1 * contourWidthFactor },
         showscale: false,
       }];
     case "filled_contour":
@@ -2514,7 +2536,7 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
         colorscale,
         colorbar,
         contours: { ...contourTrace.contours, coloring: "heatmap" },
-        line: { color: "rgba(24,34,51,0.28)", width: 0.6 },
+        line: { color: "rgba(24,34,51,0.28)", width: 0.6 * contourWidthFactor },
       }];
     case "heatmap_contour":
       return [
@@ -2522,7 +2544,7 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
         {
           ...contourTrace,
           contours: { ...contourTrace.contours, coloring: "none" },
-          line: { color: "#182233", width: 1.0 },
+          line: { color: "#182233", width: 1.0 * contourWidthFactor },
           showscale: false,
           hoverinfo: "skip",
           opacity: 0.92,
