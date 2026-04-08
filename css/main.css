@@ -365,12 +365,6 @@ select {
   gap: 8px;
 }
 
-.plot-type-group {
-  display: grid;
-  grid-template-columns: minmax(0, max-content);
-  align-items: start;
-}
-
 .toggle-btn {
   appearance: none;
   border: 1px solid var(--line);
