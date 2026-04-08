@@ -668,6 +668,11 @@ select {
   margin-bottom: 14px;
 }
 
+.joint-display-controls {
+  display: grid;
+  gap: 14px;
+}
+
 .joint-plot-panel {
   width: min(100%, 860px);
   aspect-ratio: 1 / 1;
