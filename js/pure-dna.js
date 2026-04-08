@@ -2460,9 +2460,6 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
     thickness: 14,
     len: 0.9,
   };
-  const contourStep = Number.isFinite(zmin) && Number.isFinite(zmax) && zmax > zmin
-    ? (zmax - zmin) / 10
-    : undefined;
   const heatmapTrace = {
     x: xCenters,
     y: yCenters,
@@ -2483,13 +2480,11 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
     customdata: customData,
     type: "contour",
     autocontour: true,
+    ncontours: 10,
     zmin,
     zmax,
     hovertemplate: hoverTemplate,
     contours: {
-      start: zmin,
-      end: zmax,
-      size: contourStep,
       showlabels: false,
     },
   };
@@ -2698,11 +2693,14 @@ async function renderJointPlot() {
 
   const plotNode = el("jointPlot");
   const canReact = Array.isArray(plotNode.data);
+  const forceFreshPlot = state.jointPlotType !== "heatmap";
   if (!canReact) plotNode.innerHTML = "";
   const config = { responsive: true, displayModeBar: false };
-  if (canReact) {
+  if (canReact && !forceFreshPlot) {
     await Plotly.react("jointPlot", traces, layout, config);
   } else {
+    if (canReact) Plotly.purge(plotNode);
+    plotNode.innerHTML = "";
     await Plotly.newPlot("jointPlot", traces, layout, config);
   }
 
