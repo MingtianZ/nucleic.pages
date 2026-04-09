@@ -65,9 +65,9 @@ const JOINT_CONTOUR_LABEL_OPTIONS = [
 ];
 
 const JOINT_CONTOUR_WIDTH_OPTIONS = [
-  { id: "thin", label: "Thin", factor: 0.8 },
-  { id: "standard", label: "Standard", factor: 1.0 },
-  { id: "thick", label: "Thick", factor: 1.5 },
+  { id: "wide", label: "Wide", ncontours: 7 },
+  { id: "standard", label: "Standard", ncontours: 10 },
+  { id: "tight", label: "Tight", ncontours: 14 },
 ];
 
 const MD_BDNA_46 = new Set([
@@ -2474,8 +2474,8 @@ function jointIntensityLabel() {
   return state.displayScale === "density" ? "Density (smoothed)" : "Probability (smoothed)";
 }
 
-function currentJointContourWidthFactor() {
-  return JOINT_CONTOUR_WIDTH_OPTIONS.find((item) => item.id === state.jointContourWidth)?.factor ?? 1.0;
+function currentJointContourCount() {
+  return JOINT_CONTOUR_WIDTH_OPTIONS.find((item) => item.id === state.jointContourWidth)?.ncontours ?? 10;
 }
 
 function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTemplate, maxIntensity, logFloor, intensityLabel) {
@@ -2512,7 +2512,7 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
     customdata: customData,
     type: "contour",
     autocontour: true,
-    ncontours: 10,
+    ncontours: currentJointContourCount(),
     zmin,
     zmax,
     hovertemplate: hoverTemplate,
@@ -2520,14 +2520,13 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
       showlabels: state.jointContourLabels === "on",
     },
   };
-  const contourWidthFactor = currentJointContourWidthFactor();
 
   switch (state.jointPlotType) {
     case "contour":
       return [{
         ...contourTrace,
         contours: { ...contourTrace.contours, coloring: "none" },
-        line: { color: "#182233", width: 1.1 * contourWidthFactor },
+        line: { color: "#182233", width: 1.1 },
         showscale: false,
       }];
     case "filled_contour":
@@ -2536,7 +2535,7 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
         colorscale,
         colorbar,
         contours: { ...contourTrace.contours, coloring: "heatmap" },
-        line: { color: "rgba(24,34,51,0.28)", width: 0.6 * contourWidthFactor },
+        line: { color: "rgba(24,34,51,0.28)", width: 0.6 },
       }];
     case "heatmap_contour":
       return [
@@ -2544,7 +2543,7 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
         {
           ...contourTrace,
           contours: { ...contourTrace.contours, coloring: "none" },
-          line: { color: "#182233", width: 1.0 * contourWidthFactor },
+          line: { color: "#182233", width: 1.0 },
           showscale: false,
           hoverinfo: "skip",
           opacity: 0.92,
