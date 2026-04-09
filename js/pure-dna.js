@@ -65,9 +65,9 @@ const JOINT_CONTOUR_LABEL_OPTIONS = [
 ];
 
 const JOINT_CONTOUR_WIDTH_OPTIONS = [
-  { id: "wide", label: "Wide", ncontours: 7 },
-  { id: "standard", label: "Standard", ncontours: 10 },
-  { id: "tight", label: "Tight", ncontours: 14 },
+  { id: "wide", label: "Wide", targetLevels: 7 },
+  { id: "standard", label: "Standard", targetLevels: 10 },
+  { id: "tight", label: "Tight", targetLevels: 14 },
 ];
 
 const MD_BDNA_46 = new Set([
@@ -2474,27 +2474,79 @@ function jointIntensityLabel() {
   return state.displayScale === "density" ? "Density (smoothed)" : "Probability (smoothed)";
 }
 
-function currentJointContourCount() {
-  return JOINT_CONTOUR_WIDTH_OPTIONS.find((item) => item.id === state.jointContourWidth)?.ncontours ?? 10;
+function currentJointContourTargetLevels() {
+  return JOINT_CONTOUR_WIDTH_OPTIONS.find((item) => item.id === state.jointContourWidth)?.targetLevels ?? 10;
+}
+
+function nextNiceStepAtLeast(value) {
+  if (!(value > 0)) return NaN;
+  const exponent = Math.floor(Math.log10(value));
+  const mantissas = [1, 2, 2.5, 5, 10];
+  for (let shift = -1; shift <= 1; shift += 1) {
+    const scale = 10 ** (exponent + shift);
+    for (const mantissa of mantissas) {
+      const candidate = mantissa * scale;
+      if (candidate >= value) return candidate;
+    }
+  }
+  return 10 ** (exponent + 2);
+}
+
+function nextNiceStepAtMost(value) {
+  if (!(value > 0)) return NaN;
+  const exponent = Math.floor(Math.log10(value));
+  const mantissas = [10, 5, 2.5, 2, 1];
+  for (let shift = 1; shift >= -1; shift -= 1) {
+    const scale = 10 ** (exponent + shift);
+    for (const mantissa of mantissas) {
+      const candidate = mantissa * scale;
+      if (candidate <= value) return candidate;
+    }
+  }
+  return 10 ** (exponent - 2);
+}
+
+function buildContourSpacingSet(range) {
+  const standardTarget = range / 10;
+  let standard = nextNiceStepAtLeast(standardTarget);
+  let wide = nextNiceStepAtLeast(range / 7);
+  let tight = nextNiceStepAtMost(range / 14);
+
+  if (!(standard > 0)) standard = standardTarget;
+  if (!(wide > 0)) wide = standard * 1.5;
+  if (!(tight > 0)) tight = standard / 1.5;
+
+  if (!(wide > standard)) {
+    wide = nextNiceStepAtLeast(standard * 1.5);
+  }
+  if (!(tight < standard)) {
+    tight = nextNiceStepAtMost(standard / 1.5);
+  }
+  if (!(tight > 0) || tight >= standard) {
+    tight = standard / 2;
+  }
+
+  return { wide, standard, tight };
 }
 
 function buildJointContourConfig(zmin, zmax) {
-  const ncontours = currentJointContourCount();
   const base = {
     showlabels: state.jointContourLabels === "on",
   };
   if (!Number.isFinite(zmin) || !Number.isFinite(zmax) || zmax <= zmin) {
     return {
       autocontour: true,
-      ncontours,
+      ncontours: currentJointContourTargetLevels(),
       contours: base,
     };
   }
-  const size = (zmax - zmin) / ncontours;
+  const range = zmax - zmin;
+  const spacingSet = buildContourSpacingSet(range);
+  const size = spacingSet[state.jointContourWidth] ?? spacingSet.standard;
   if (!(size > 0)) {
     return {
       autocontour: true,
-      ncontours,
+      ncontours: currentJointContourTargetLevels(),
       contours: base,
     };
   }
