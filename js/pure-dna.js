@@ -85,6 +85,7 @@ const state = {
   pdbManifest: null,
   parameterMetaById: {},
   familyCache: new Map(),
+  jointRenderCache: null,
   renderRevision: 0,
   cleanliness: "conservative",
   duplexGate: "any",
@@ -661,6 +662,10 @@ function currentBackboneStateLabel() {
   return currentFamilyMeta()?.secondary_context_label ?? "Backbone State";
 }
 
+function sortedSelectionKey(values) {
+  return [...values].sort().join(",");
+}
+
 function currentFamily2Meta() {
   return state.family2Id ? state.manifest?.families?.[state.family2Id] ?? null : null;
 }
@@ -771,6 +776,32 @@ function buildAllowedPidMask() {
     total += 1;
   }
   return { mask, total };
+}
+
+function buildJointRenderCacheKey(xFamilyId, xParamId, yFamilyId, yParamId) {
+  return JSON.stringify({
+    xFamilyId,
+    xParamId,
+    yFamilyId,
+    yParamId,
+    cleanliness: state.cleanliness,
+    duplexGate: state.duplexGate,
+    methods: sortedSelectionKey(state.methods),
+    resolution: state.resolution,
+    forms: sortedSelectionKey(state.forms),
+    contexts: sortedSelectionKey(state.contexts),
+    backboneStates: sortedSelectionKey(state.backboneStates),
+    terminalPolicy: state.terminalPolicy,
+    pdbPreset: state.pdbPreset ?? "off",
+    jointJoinMode: state.jointJoinMode,
+    jointResidueSide: state.jointResidueSide,
+    jointContexts: sortedSelectionKey(state.jointContexts),
+    jointBackboneStates: sortedSelectionKey(state.jointBackboneStates),
+    circularMode: state.circularMode,
+    smoothingSigma: state.smoothingSigma,
+    displayScale: state.displayScale,
+    binDetail: state.binDetail,
+  });
 }
 
 function groupAllowedRowsByForm(allowedPidMask) {
@@ -2637,6 +2668,96 @@ function buildJointPlotTraces(zData, xCenters, yCenters, customData, hoverTempla
   }
 }
 
+function computeJointRenderData(familyData1, xFamilyId, xParamId, xMeta, familyData2, yFamilyId, yParamId, yMeta) {
+  const allowed = buildAllowedPidMask();
+  const pairs = collectJointPairs(familyData1, xParamId, familyData2, yParamId, allowed.mask);
+  if (pairs.n === 0) {
+    return {
+      empty: true,
+      matchedN: 0,
+      matchedPdbs: 0,
+    };
+  }
+
+  const xAxisSpec = buildJointAxisSpec(xMeta, pairs.xs);
+  const yAxisSpec = buildJointAxisSpec(yMeta, pairs.ys);
+  const xRange = xAxisSpec.range;
+  const yRange = yAxisSpec.range;
+
+  const binsX = jointBinCount(xMeta);
+  const binsY = jointBinCount(yMeta);
+
+  let grid = bin2d(xAxisSpec.values, yAxisSpec.values, xMeta, yMeta, xRange, yRange, binsX, binsY);
+
+  const sigma = parseFloat(state.smoothingSigma) || 0;
+  grid = smooth2d(grid, binsX, binsY, sigma, xMeta.isCircular, yMeta.isCircular);
+  const intensity = normalizeJointGrid(grid, binsX, binsY, xRange, yRange);
+  const logFloor = 1e-8;
+
+  let maxIntensity = 0;
+  for (const value of intensity) {
+    if (!Number.isFinite(value) || value <= 0) continue;
+    if (value > maxIntensity) maxIntensity = value;
+  }
+
+  const xCenters = [];
+  const xSpan = xRange[1] - xRange[0];
+  for (let i = 0; i < binsX; i += 1) {
+    xCenters.push(xRange[0] + (i + 0.5) * (xSpan / binsX));
+  }
+  const yCenters = [];
+  const ySpan = yRange[1] - yRange[0];
+  for (let i = 0; i < binsY; i += 1) {
+    yCenters.push(yRange[0] + (i + 0.5) * (ySpan / binsY));
+  }
+
+  const xHover = jointAxisHoverValues(xCenters, xMeta, xAxisSpec);
+  const yHover = jointAxisHoverValues(yCenters, yMeta, yAxisSpec);
+  const rawData = [];
+  const customData = [];
+  for (let row = 0; row < binsY; row += 1) {
+    const rawRow = new Array(binsX);
+    const cdRow = new Array(binsX);
+    for (let col = 0; col < binsX; col += 1) {
+      const val = intensity[row * binsX + col];
+      rawRow[col] = val;
+      cdRow[col] = [
+        xHover.displayed[col],
+        xHover.original[col],
+        yHover.displayed[row],
+        yHover.original[row],
+        val,
+      ];
+    }
+    rawData.push(rawRow);
+    customData.push(cdRow);
+  }
+
+  const corr = computeCorrelation(xAxisSpec.values, yAxisSpec.values);
+  const circularCorr = computeCircularCorrelation(pairs.xs, xMeta, pairs.ys, yMeta);
+
+  return {
+    empty: false,
+    matchedN: pairs.n,
+    matchedPdbs: pairs.pdbCount,
+    xAxisSpec,
+    yAxisSpec,
+    xRange,
+    yRange,
+    binsX,
+    binsY,
+    intensity,
+    logFloor,
+    maxIntensity,
+    xCenters,
+    yCenters,
+    rawData,
+    customData,
+    corr,
+    circularCorr,
+  };
+}
+
 function jointAxisHoverValues(centers, paramMeta, axisSpec) {
   if (!paramMeta.isCircular) {
     return {
@@ -2679,48 +2800,47 @@ async function renderJointPlot() {
   if (!xMeta || !yMeta) return;
   if (!familyData1.values[xParamId] || !familyData2.values[yParamId]) return;
 
-  const allowed = buildAllowedPidMask();
-  const pairs = collectJointPairs(familyData1, xParamId, familyData2, yParamId, allowed.mask);
+  const cacheKey = buildJointRenderCacheKey(xFamilyId, xParamId, yFamilyId, yParamId);
+  if (!state.jointRenderCache || state.jointRenderCache.key !== cacheKey) {
+    state.jointRenderCache = {
+      key: cacheKey,
+      data: computeJointRenderData(familyData1, xFamilyId, xParamId, xMeta, familyData2, yFamilyId, yParamId, yMeta),
+    };
+  }
+  const jointData = state.jointRenderCache.data;
 
-  if (pairs.n === 0) {
+  if (jointData.empty) {
     const plotNode = el("jointPlot");
     if (plotNode.data) Plotly.purge(plotNode);
     plotNode.innerHTML = `<div class="empty-state">No matched observations for the current filter stack.</div>`;
     el("jointStats").hidden = true;
     return;
   }
-
-  const xAxisSpec = buildJointAxisSpec(xMeta, pairs.xs);
-  const yAxisSpec = buildJointAxisSpec(yMeta, pairs.ys);
-  const xRange = xAxisSpec.range;
-  const yRange = yAxisSpec.range;
-
-  const binsX = jointBinCount(xMeta);
-  const binsY = jointBinCount(yMeta);
-
-  let grid = bin2d(xAxisSpec.values, yAxisSpec.values, xMeta, yMeta, xRange, yRange, binsX, binsY);
-
-  const sigma = parseFloat(state.smoothingSigma) || 0;
-  grid = smooth2d(grid, binsX, binsY, sigma, xMeta.isCircular, yMeta.isCircular);
-  const intensity = normalizeJointGrid(grid, binsX, binsY, xRange, yRange);
-  const logFloor = 1e-8;
-
-  let minPositive = Infinity;
-  let maxIntensity = 0;
-  for (const value of intensity) {
-    if (!Number.isFinite(value) || value <= 0) continue;
-    if (value < minPositive) minPositive = value;
-    if (value > maxIntensity) maxIntensity = value;
-  }
+  const {
+    matchedN,
+    matchedPdbs,
+    xAxisSpec,
+    yAxisSpec,
+    xRange,
+    yRange,
+    binsX,
+    binsY,
+    intensity,
+    logFloor,
+    maxIntensity,
+    xCenters,
+    yCenters,
+    rawData,
+    customData,
+    corr,
+    circularCorr,
+  } = jointData;
 
   const zData = [];
-  const rawData = [];
   for (let row = 0; row < binsY; row += 1) {
     const rowArr = new Array(binsX);
-    const rawRow = new Array(binsX);
     for (let col = 0; col < binsX; col += 1) {
       const val = intensity[row * binsX + col];
-      rawRow[col] = val;
       if (state.jointColorScale === "log") {
         rowArr[col] = Math.log10(Math.max(val, logFloor));
       } else {
@@ -2728,18 +2848,6 @@ async function renderJointPlot() {
       }
     }
     zData.push(rowArr);
-    rawData.push(rawRow);
-  }
-
-  const xCenters = [];
-  const xSpan = xRange[1] - xRange[0];
-  for (let i = 0; i < binsX; i += 1) {
-    xCenters.push(xRange[0] + (i + 0.5) * (xSpan / binsX));
-  }
-  const yCenters = [];
-  const ySpan = yRange[1] - yRange[0];
-  for (let i = 0; i < binsY; i += 1) {
-    yCenters.push(yRange[0] + (i + 0.5) * (ySpan / binsY));
   }
 
   const xTitle = xMeta.unit ? `${xMeta.display_name} (${xMeta.unit})` : xMeta.display_name;
@@ -2751,22 +2859,6 @@ async function renderJointPlot() {
     ? buildJointCircularAxis(yMeta, yAxisSpec.displayCut, yAxisSpec.axisMode)
     : { range: yRange, automargin: true, zeroline: false };
   const intensityLabel = jointIntensityLabel();
-  const xHover = jointAxisHoverValues(xCenters, xMeta, xAxisSpec);
-  const yHover = jointAxisHoverValues(yCenters, yMeta, yAxisSpec);
-  const customData = [];
-  for (let row = 0; row < binsY; row += 1) {
-    const cdRow = new Array(binsX);
-    for (let col = 0; col < binsX; col += 1) {
-      cdRow[col] = [
-        xHover.displayed[col],
-        xHover.original[col],
-        yHover.displayed[row],
-        yHover.original[row],
-        rawData[row][col],
-      ];
-    }
-    customData.push(cdRow);
-  }
 
   const xHoverLine = xMeta.isCircular
     ? (xAxisSpec.axisMode === "signed_180"
@@ -2818,10 +2910,8 @@ async function renderJointPlot() {
     await Plotly.newPlot("jointPlot", traces, layout, config);
   }
 
-  const corr = computeCorrelation(xAxisSpec.values, yAxisSpec.values);
-  const circularCorr = computeCircularCorrelation(pairs.xs, xMeta, pairs.ys, yMeta);
-  el("jointMatchedN").textContent = formatInt(pairs.n);
-  el("jointMatchedPdbs").textContent = formatInt(pairs.pdbCount);
+  el("jointMatchedN").textContent = formatInt(matchedN);
+  el("jointMatchedPdbs").textContent = formatInt(matchedPdbs);
   el("jointPearsonR").textContent = Number.isFinite(corr.r) ? corr.r.toFixed(4) : "-";
   el("jointCircularR").textContent = Number.isFinite(circularCorr) ? circularCorr.toFixed(4) : "-";
   el("jointRSquared").textContent = Number.isFinite(corr.r2) ? corr.r2.toFixed(4) : "-";
