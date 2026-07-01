@@ -1,0 +1,58 @@
+{
+  "generated_at": "2026-07-01T03:11:44.378Z",
+  "opening_bins": [
+    {
+      "id": "small",
+      "label": "Small opening",
+      "min": -16,
+      "max": -8,
+      "include_min": true,
+      "include_max": false,
+      "notes": "Opening in [-16, -8) degrees."
+    },
+    {
+      "id": "middle",
+      "label": "Middle opening",
+      "min": -8,
+      "max": 2,
+      "include_min": true,
+      "include_max": false,
+      "notes": "Opening in [-8, 2) degrees."
+    },
+    {
+      "id": "large",
+      "label": "Large opening",
+      "min": 2,
+      "max": 10,
+      "include_min": true,
+      "include_max": true,
+      "notes": "Opening in [2, 10] degrees."
+    },
+    {
+      "id": "outside",
+      "label": "Outside bins",
+      "min": null,
+      "max": null,
+      "include_min": false,
+      "include_max": false,
+      "notes": "Finite opening outside the small, middle, and large bins."
+    },
+    {
+      "id": "missing",
+      "label": "Missing opening",
+      "min": null,
+      "max": null,
+      "include_min": false,
+      "include_max": false,
+      "notes": "No finite opening value is available."
+    }
+  ],
+  "pdb_entries_processed": 1830,
+  "pdb_entries_missing": 0,
+  "scalar_term_count_enabled": 102,
+  "scalar_rows": 966652,
+  "opening_summary_rows": 2124,
+  "opening_comparison_rows": 704,
+  "local_coordinate_rows": 224278,
+  "local_coordinate_summary_rows": 168
+}

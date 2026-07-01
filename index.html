@@ -483,6 +483,138 @@
           </div>
         </div>
       </section>
+
+      <section class="panel" id="baseGeometrySection">
+        <div class="panel-head">
+          <div>
+            <h2>Base Geometry Survey</h2>
+            <p>
+              Atom-defined PDB survey terms for Alex/Xiaojing opening analysis:
+              base internal angles, base-local dihedrals, same-pair
+              major-groove distances, and cytosine-frame average coordinates.
+              Data load only when requested.
+            </p>
+          </div>
+          <button type="button" id="baseGeometryLoad" class="toggle-btn collapse-toggle">
+            Load base geometry survey
+          </button>
+        </div>
+
+        <div id="baseGeometryBody" hidden>
+          <div class="filter-sections">
+            <section class="filter-section filter-section-data">
+              <div class="filter-section-head">
+                <h3>Survey Selection</h3>
+                <p>These controls filter only the base-geometry survey below; the global PDB filters above still apply.</p>
+              </div>
+              <div class="filter-layout">
+                <div class="filter-cluster">
+                  <span class="cluster-title">Survey Group</span>
+                  <div id="baseGeometryGroup" class="toggle-group"></div>
+                </div>
+                <div class="filter-cluster">
+                  <span class="cluster-title">Sequence Context</span>
+                  <div id="baseGeometryContextGroup" class="toggle-group multi"></div>
+                </div>
+                <div class="filter-cluster">
+                  <span class="cluster-title label-with-help">
+                    <span>Minimum Per Bin</span>
+                    <span class="help-wrap">
+                      <button type="button" class="help-badge" aria-label="Explain minimum per bin">?</button>
+                      <span class="help-tooltip">Ranking rows are strongest when small, middle, and large opening bins all meet this observation count.</span>
+                    </span>
+                  </span>
+                  <div id="baseGeometryMinObsGroup" class="toggle-group"></div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div class="stats-strip" id="baseGeometryStats">
+            <div class="stat-box">
+              <span class="stat-label">Filtered scalar rows</span>
+              <span class="stat-value" id="baseGeometryScalarRows">-</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Rankable term-contexts</span>
+              <span class="stat-value" id="baseGeometryRankRows">-</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Plotted term rows</span>
+              <span class="stat-value" id="baseGeometrySelectedRows">-</span>
+            </div>
+          </div>
+
+          <div class="panel-subhead">
+            <div>
+              <h3>Opening-Binned Term Ranking</h3>
+              <p>Large-minus-small ranking is recomputed from raw rows under the active global filters; circular dihedrals use wrapped angular deltas.</p>
+            </div>
+          </div>
+          <div class="table-shell compact-table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Term</th>
+                  <th>Context</th>
+                  <th>n small/middle/large</th>
+                  <th>mean small</th>
+                  <th>mean middle</th>
+                  <th>mean large</th>
+                  <th>large-small</th>
+                  <th>Trend</th>
+                </tr>
+              </thead>
+              <tbody id="baseGeometryRankingBody"></tbody>
+            </table>
+          </div>
+
+          <div class="controls base-geometry-term-controls">
+            <label>
+              Selected term / context
+              <select id="baseGeometryTermSelect"></select>
+            </label>
+          </div>
+
+          <div id="baseGeometryPlot" class="plot-panel base-geometry-plot">
+            <div class="empty-state">Load the survey to draw an opening-binned term distribution.</div>
+          </div>
+
+          <div class="panel-subhead">
+            <div>
+              <h3>Cytosine-Frame Average Coordinates</h3>
+              <p>CG/G-C base-pair atom coordinates are aggregated in the cytosine N1-C2 best-fit-plane frame under current PDB filters.</p>
+            </div>
+          </div>
+          <div class="joint-controls">
+            <div class="filter-cluster">
+              <span class="cluster-title">Coordinate Context</span>
+              <div id="baseGeometryCoordContextGroup" class="toggle-group"></div>
+            </div>
+            <div class="filter-cluster">
+              <span class="cluster-title">Opening Bin</span>
+              <div id="baseGeometryCoordBinGroup" class="toggle-group"></div>
+            </div>
+          </div>
+          <div class="table-shell compact-table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Atom</th>
+                  <th>n obs</th>
+                  <th>n pairs</th>
+                  <th>n PDB</th>
+                  <th>mean x</th>
+                  <th>mean y</th>
+                  <th>mean z</th>
+                  <th>RMS spread</th>
+                </tr>
+              </thead>
+              <tbody id="baseGeometryCoordBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </div>
 
     <script type="module" src="./js/pure-dna.js"></script>

@@ -1,0 +1,154 @@
+{
+  "version": "base_geometry_v1",
+  "display_name": "Base Geometry Survey",
+  "generated_at": "2026-07-01T03:15:24.786Z",
+  "description": "Atom-defined PDB survey terms for opening-binned base geometry analysis.",
+  "opening_bins": [
+    {
+      "id": "small",
+      "label": "Small opening",
+      "min": -16,
+      "max": -8,
+      "include_min": true,
+      "include_max": false,
+      "notes": "Opening in [-16, -8) degrees."
+    },
+    {
+      "id": "middle",
+      "label": "Middle opening",
+      "min": -8,
+      "max": 2,
+      "include_min": true,
+      "include_max": false,
+      "notes": "Opening in [-8, 2) degrees."
+    },
+    {
+      "id": "large",
+      "label": "Large opening",
+      "min": 2,
+      "max": 10,
+      "include_min": true,
+      "include_max": true,
+      "notes": "Opening in [2, 10] degrees."
+    },
+    {
+      "id": "outside",
+      "label": "Outside bins",
+      "min": null,
+      "max": null,
+      "include_min": false,
+      "include_max": false,
+      "notes": "Finite opening outside the small, middle, and large bins."
+    },
+    {
+      "id": "missing",
+      "label": "Missing opening",
+      "min": null,
+      "max": null,
+      "include_min": false,
+      "include_max": false,
+      "notes": "No finite opening value is available."
+    }
+  ],
+  "survey_groups": [
+    {
+      "id": "all",
+      "label": "All scalar terms"
+    },
+    {
+      "id": "base_internal_angles",
+      "label": "Base internal angles"
+    },
+    {
+      "id": "base_local_dihedrals",
+      "label": "Base-local dihedrals"
+    },
+    {
+      "id": "major_groove_distances",
+      "label": "Major-groove distances"
+    }
+  ],
+  "sequence_contexts": [
+    "A-T",
+    "C-G",
+    "G-C",
+    "T-A"
+  ],
+  "local_coordinate_contexts": [
+    "C-G",
+    "G-C"
+  ],
+  "defaults": {
+    "survey_group": "all",
+    "sequence_contexts": [
+      "A-T",
+      "C-G",
+      "G-C",
+      "T-A"
+    ],
+    "min_observations_per_bin": 5,
+    "opening_bins_for_ranking": [
+      "small",
+      "middle",
+      "large"
+    ]
+  },
+  "files": {
+    "terms": {
+      "file": "./base_geometry_terms.json",
+      "kind": "json",
+      "bytes": 65627,
+      "row_count": null
+    },
+    "scalar_terms": {
+      "file": "./base_geometry_terms.tsv.gz",
+      "kind": "tsv_gz",
+      "bytes": 8858504,
+      "row_count": 966652
+    },
+    "opening_summary": {
+      "file": "./opening_binned_term_summary.tsv.gz",
+      "kind": "tsv_gz",
+      "bytes": 70372,
+      "row_count": 2124
+    },
+    "opening_comparison": {
+      "file": "./opening_binned_term_comparison.tsv.gz",
+      "kind": "tsv_gz",
+      "bytes": 15066,
+      "row_count": 704
+    },
+    "wc_local_coordinates": {
+      "file": "./wc_local_coordinates.tsv.gz",
+      "kind": "tsv_gz",
+      "bytes": 3177754,
+      "row_count": 224278
+    },
+    "wc_average_coordinates": {
+      "file": "./wc_average_coordinates.tsv.gz",
+      "kind": "tsv_gz",
+      "bytes": 5936,
+      "row_count": 168
+    },
+    "missing_report": {
+      "file": "./missing_report.tsv.gz",
+      "kind": "tsv_gz",
+      "bytes": 470,
+      "row_count": 102
+    },
+    "summary": {
+      "file": "./summary.json",
+      "kind": "json",
+      "bytes": 1393,
+      "row_count": null
+    }
+  },
+  "source_summary": {
+    "pdb_entries_processed": 1830,
+    "scalar_term_count_enabled": 102,
+    "scalar_rows": 966652,
+    "opening_comparison_rows": 704,
+    "local_coordinate_rows": 224278,
+    "local_coordinate_summary_rows": 168
+  }
+}

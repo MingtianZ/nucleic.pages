@@ -1,4 +1,5 @@
 const MANIFEST_PATH = "./assets/pure_dna/manifest.json";
+const BASE_GEOMETRY_MANIFEST_PATH = "./assets/pure_dna/base_geometry/base_geometry_manifest.json";
 
 const FORM_META = {
   adna: { label: "A-DNA", color: "#8c3b2a" },
@@ -40,6 +41,21 @@ const BIN_DETAIL_OPTIONS = [
   { id: "standard", label: "Standard" },
   { id: "fine", label: "Fine" },
 ];
+
+const BASE_GEOMETRY_MIN_OBS_OPTIONS = [
+  { id: "1", label: "1" },
+  { id: "5", label: "5" },
+  { id: "20", label: "20" },
+  { id: "50", label: "50" },
+];
+
+const BASE_GEOMETRY_OPENING_BINS = ["small", "middle", "large"];
+
+const BASE_GEOMETRY_BIN_META = {
+  small: { label: "Small", color: "#174a7e" },
+  middle: { label: "Middle", color: "#c46b00" },
+  large: { label: "Large", color: "#8c3b2a" },
+};
 
 const JOINT_JOIN_MODE_OPTIONS = [
   { id: "same_level", label: "Same-level" },
@@ -121,6 +137,23 @@ const state = {
   jointContourWidth: "standard",
   jointColorScale: "log",
   jointPalette: "hotspots",
+  baseGeometry: {
+    loaded: false,
+    loading: false,
+    manifest: null,
+    termsConfig: null,
+    termMetaById: new Map(),
+    scalarData: null,
+    coordData: null,
+    surveyGroup: "all",
+    contexts: new Set(["A-T", "C-G", "G-C", "T-A"]),
+    minObs: "5",
+    selectedTermId: null,
+    selectedSequenceContext: null,
+    coordContext: "C-G",
+    coordBin: "middle",
+    lastRankingRows: [],
+  },
 };
 
 function el(id) {
@@ -166,12 +199,15 @@ function renderJointInteractionError(error) {
 }
 
 function triggerFiltersAndPlot() {
-  renderFiltersAndPlot().catch(renderInteractionError);
+  renderFiltersAndPlot()
+    .then(() => refreshBaseGeometryIfLoaded())
+    .catch(renderInteractionError);
 }
 
 function triggerPlot(options = {}) {
   renderPlot(options).catch(renderInteractionError);
   renderJointPlot().catch(renderJointInteractionError);
+  refreshBaseGeometryIfLoaded();
 }
 
 function formatInt(value) {
@@ -2926,7 +2962,768 @@ async function renderJointPlot() {
 }
 
 function triggerJointPlot() {
-  renderJointPlot().catch(renderInteractionError);
+  renderJointPlot().catch(renderJointInteractionError);
+}
+
+// ---------------------------------------------------------------------------
+// Base Geometry Survey
+// ---------------------------------------------------------------------------
+
+function unitLabel(unit) {
+  return unit === "A" ? "Å" : (unit || "");
+}
+
+function parseBaseGeometryScalarTable(text) {
+  const lines = parseTsvLines(text);
+  const header = lines[0].split("\t");
+  const indexOf = Object.fromEntries(header.map((key, index) => [key, index]));
+  const rowCount = Math.max(0, lines.length - 1);
+  const data = {
+    rowCount,
+    pid: new Uint32Array(rowCount),
+    terminalFlag: new Uint8Array(rowCount),
+    value: new Float32Array(rowCount),
+    opening: new Float32Array(rowCount),
+    pdbId: new Array(rowCount),
+    termId: new Array(rowCount),
+    termLabel: new Array(rowCount),
+    surveyGroup: new Array(rowCount),
+    sequenceContext: new Array(rowCount),
+    openingBin: new Array(rowCount),
+    unit: new Array(rowCount),
+    siteLabel: new Array(rowCount),
+    pairSiteLabel: new Array(rowCount),
+    termIndex: new Map(),
+  };
+
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cols = lines[rowIndex + 1].split("\t");
+    data.pid[rowIndex] = parseIntSafe(cols[indexOf.pid]);
+    data.terminalFlag[rowIndex] = parseIntSafe(cols[indexOf.terminal_flag]);
+    data.value[rowIndex] = parseNumber(cols[indexOf.value]);
+    data.opening[rowIndex] = parseNumber(cols[indexOf.opening]);
+    data.pdbId[rowIndex] = String(cols[indexOf.pdb_id] ?? "").trim();
+    data.termId[rowIndex] = String(cols[indexOf.term_id] ?? "").trim();
+    data.termLabel[rowIndex] = String(cols[indexOf.term_label] ?? "").trim();
+    data.surveyGroup[rowIndex] = String(cols[indexOf.survey_group] ?? "").trim();
+    data.sequenceContext[rowIndex] = String(cols[indexOf.sequence_context] ?? "").trim();
+    data.openingBin[rowIndex] = String(cols[indexOf.opening_bin] ?? "").trim();
+    data.unit[rowIndex] = String(cols[indexOf.unit] ?? "").trim();
+    data.siteLabel[rowIndex] = String(cols[indexOf.site_label] ?? "").trim();
+    data.pairSiteLabel[rowIndex] = String(cols[indexOf.pair_site_label] ?? "").trim();
+    const key = data.termId[rowIndex];
+    if (!data.termIndex.has(key)) data.termIndex.set(key, []);
+    data.termIndex.get(key).push(rowIndex);
+  }
+
+  return data;
+}
+
+function parseBaseGeometryCoordinateTable(text) {
+  const lines = parseTsvLines(text);
+  const header = lines[0].split("\t");
+  const indexOf = Object.fromEntries(header.map((key, index) => [key, index]));
+  const rowCount = Math.max(0, lines.length - 1);
+  const data = {
+    rowCount,
+    pid: new Uint32Array(rowCount),
+    terminalFlag: new Uint8Array(rowCount),
+    x: new Float32Array(rowCount),
+    y: new Float32Array(rowCount),
+    z: new Float32Array(rowCount),
+    pdbId: new Array(rowCount),
+    pairSiteLabel: new Array(rowCount),
+    sequenceContext: new Array(rowCount),
+    openingBin: new Array(rowCount),
+    atomLabel: new Array(rowCount),
+    atomBase: new Array(rowCount),
+    atomName: new Array(rowCount),
+  };
+
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cols = lines[rowIndex + 1].split("\t");
+    data.pid[rowIndex] = parseIntSafe(cols[indexOf.pid]);
+    data.terminalFlag[rowIndex] = indexOf.terminal_flag !== undefined ? parseIntSafe(cols[indexOf.terminal_flag]) : 0;
+    data.x[rowIndex] = parseNumber(cols[indexOf.x]);
+    data.y[rowIndex] = parseNumber(cols[indexOf.y]);
+    data.z[rowIndex] = parseNumber(cols[indexOf.z]);
+    data.pdbId[rowIndex] = String(cols[indexOf.pdb_id] ?? "").trim();
+    data.pairSiteLabel[rowIndex] = String(cols[indexOf.pair_site_label] ?? "").trim();
+    data.sequenceContext[rowIndex] = String(cols[indexOf.sequence_context] ?? "").trim();
+    data.openingBin[rowIndex] = String(cols[indexOf.opening_bin] ?? "").trim();
+    data.atomLabel[rowIndex] = String(cols[indexOf.atom_label] ?? "").trim();
+    data.atomBase[rowIndex] = String(cols[indexOf.target_base] ?? "").trim();
+    data.atomName[rowIndex] = String(cols[indexOf.atom_name] ?? "").trim();
+  }
+
+  return data;
+}
+
+function baseGeometrySurveyGroupOptions() {
+  return state.baseGeometry.manifest?.survey_groups ?? [
+    { id: "all", label: "All scalar terms" },
+    { id: "base_internal_angles", label: "Base internal angles" },
+    { id: "base_local_dihedrals", label: "Base-local dihedrals" },
+    { id: "major_groove_distances", label: "Major-groove distances" },
+  ];
+}
+
+function buildBaseGeometryTermMetaMap(termsConfig) {
+  const map = new Map();
+  for (const term of termsConfig?.terms ?? []) {
+    map.set(term.term_id, {
+      ...term,
+      period: term.is_circular ? 360 : null,
+      isCircular: term.is_circular === true,
+      display_range_default: term.is_circular ? [0, 360] : null,
+    });
+  }
+  return map;
+}
+
+function baseGeometryTermMeta(termId) {
+  return state.baseGeometry.termMetaById?.get(termId) ?? {
+    term_id: termId,
+    isCircular: false,
+    period: null,
+    unit: "",
+  };
+}
+
+function baseGeometryContextOptions() {
+  return (state.baseGeometry.manifest?.sequence_contexts ?? ["A-T", "C-G", "G-C", "T-A"])
+    .map((id) => ({ id, label: id }));
+}
+
+function baseGeometryCoordContextOptions() {
+  return (state.baseGeometry.manifest?.local_coordinate_contexts ?? ["C-G", "G-C"])
+    .map((id) => ({ id, label: id }));
+}
+
+function baseGeometryBinOptions() {
+  return BASE_GEOMETRY_OPENING_BINS.map((id) => ({
+    id,
+    label: BASE_GEOMETRY_BIN_META[id]?.label ?? id,
+  }));
+}
+
+function baseGeometryRowPasses(rowIndex, allowedPidMask) {
+  const bg = state.baseGeometry;
+  const data = bg.scalarData;
+  const pid = data.pid[rowIndex];
+  if (!allowedPidMask[pid]) return false;
+  if (state.terminalPolicy === "exclude" && data.terminalFlag[rowIndex] === 1) return false;
+  if (bg.surveyGroup !== "all" && data.surveyGroup[rowIndex] !== bg.surveyGroup) return false;
+  if (!bg.contexts.has(data.sequenceContext[rowIndex])) return false;
+  return Number.isFinite(data.value[rowIndex]);
+}
+
+function baseGeometryCoordRowPasses(rowIndex, allowedPidMask) {
+  const bg = state.baseGeometry;
+  const data = bg.coordData;
+  const pid = data.pid[rowIndex];
+  if (!allowedPidMask[pid]) return false;
+  if (state.terminalPolicy === "exclude" && data.terminalFlag[rowIndex] === 1) return false;
+  if (data.sequenceContext[rowIndex] !== bg.coordContext) return false;
+  if (data.openingBin[rowIndex] !== bg.coordBin) return false;
+  return Number.isFinite(data.x[rowIndex]) && Number.isFinite(data.y[rowIndex]) && Number.isFinite(data.z[rowIndex]);
+}
+
+function initBaseGeometryBinAccumulator() {
+  return {
+    n: 0,
+    sum: 0,
+    sumSq: 0,
+    sumCos: 0,
+    sumSin: 0,
+    pdbs: new Set(),
+  };
+}
+
+function addBaseGeometryValue(acc, value, pdbId, termMeta) {
+  acc.n += 1;
+  if (termMeta.isCircular) {
+    const period = termMeta.period ?? 360;
+    const radians = (wrapCircular(value, period) / period) * 2 * Math.PI;
+    acc.sumCos += Math.cos(radians);
+    acc.sumSin += Math.sin(radians);
+  } else {
+    acc.sum += value;
+    acc.sumSq += value * value;
+  }
+  acc.pdbs.add(pdbId);
+}
+
+function finalizeBaseGeometryBin(acc, termMeta) {
+  if (!acc.n) return { n: 0, mean: NaN, std: NaN, pdbCount: 0 };
+  if (termMeta.isCircular) {
+    const period = termMeta.period ?? 360;
+    const mean = wrapCircular((Math.atan2(acc.sumSin, acc.sumCos) / (2 * Math.PI)) * period, period);
+    const resultant = Math.max(0, Math.min(1, Math.hypot(acc.sumCos, acc.sumSin) / acc.n));
+    const std = resultant > 0 ? (Math.sqrt(-2 * Math.log(resultant)) / (2 * Math.PI)) * period : NaN;
+    return {
+      n: acc.n,
+      mean,
+      std,
+      pdbCount: acc.pdbs.size,
+    };
+  }
+  const mean = acc.sum / acc.n;
+  const variance = Math.max(0, (acc.sumSq / acc.n) - (mean * mean));
+  return {
+    n: acc.n,
+    mean,
+    std: Math.sqrt(variance),
+    pdbCount: acc.pdbs.size,
+  };
+}
+
+function baseGeometryCircularDelta(toValue, fromValue, period = 360) {
+  if (!Number.isFinite(toValue) || !Number.isFinite(fromValue)) return NaN;
+  let diff = wrapCircular(toValue, period) - wrapCircular(fromValue, period);
+  const half = period / 2;
+  if (diff > half) diff -= period;
+  if (diff < -half) diff += period;
+  return diff;
+}
+
+function baseGeometryDelta(large, small, termMeta) {
+  if (!Number.isFinite(large) || !Number.isFinite(small)) return NaN;
+  if (termMeta.isCircular) return baseGeometryCircularDelta(large, small, termMeta.period ?? 360);
+  return large - small;
+}
+
+function baseGeometryTrend(small, middle, large, termMeta) {
+  if (![small, middle, large].every(Number.isFinite)) return "";
+  if (termMeta.isCircular) {
+    const first = baseGeometryCircularDelta(middle, small, termMeta.period ?? 360);
+    const second = baseGeometryCircularDelta(large, middle, termMeta.period ?? 360);
+    if (first > 0 && second > 0) return "increasing";
+    if (first < 0 && second < 0) return "decreasing";
+    return "nonmonotonic";
+  }
+  if (small < middle && middle < large) return "increasing";
+  if (small > middle && middle > large) return "decreasing";
+  return "nonmonotonic";
+}
+
+function displayBaseGeometryValue(value, termMeta, digits = 3) {
+  if (!Number.isFinite(value)) return "-";
+  if (!termMeta.isCircular) return value.toFixed(digits);
+  const mode = state.circularMode === "signed_180" ? "signed_180" : "wrap_360";
+  const display = circularDisplayValue(value, mode, termMeta.period ?? 360);
+  return Number.isFinite(display) ? display.toFixed(digits) : "-";
+}
+
+function computeBaseGeometryRanking(allowedPidMask) {
+  const bg = state.baseGeometry;
+  const data = bg.scalarData;
+  const groups = new Map();
+  let filteredRows = 0;
+
+  for (let rowIndex = 0; rowIndex < data.rowCount; rowIndex += 1) {
+    if (!baseGeometryRowPasses(rowIndex, allowedPidMask)) continue;
+    filteredRows += 1;
+    const bin = data.openingBin[rowIndex];
+    if (!BASE_GEOMETRY_OPENING_BINS.includes(bin)) continue;
+    const key = `${data.termId[rowIndex]}|${data.sequenceContext[rowIndex]}`;
+    const termMeta = baseGeometryTermMeta(data.termId[rowIndex]);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        termId: data.termId[rowIndex],
+        termLabel: data.termLabel[rowIndex],
+        surveyGroup: data.surveyGroup[rowIndex],
+        sequenceContext: data.sequenceContext[rowIndex],
+        unit: data.unit[rowIndex],
+        termMeta,
+        small: initBaseGeometryBinAccumulator(),
+        middle: initBaseGeometryBinAccumulator(),
+        large: initBaseGeometryBinAccumulator(),
+      });
+    }
+    addBaseGeometryValue(groups.get(key)[bin], data.value[rowIndex], data.pdbId[rowIndex], termMeta);
+  }
+
+  const minObs = parseIntSafe(bg.minObs, 5);
+  const rankingRows = [...groups.values()].map((group) => {
+    const small = finalizeBaseGeometryBin(group.small, group.termMeta);
+    const middle = finalizeBaseGeometryBin(group.middle, group.termMeta);
+    const large = finalizeBaseGeometryBin(group.large, group.termMeta);
+    const delta = baseGeometryDelta(large.mean, small.mean, group.termMeta);
+    const strong = small.n >= minObs && middle.n >= minObs && large.n >= minObs;
+    return {
+      ...group,
+      small,
+      middle,
+      large,
+      delta,
+      absDelta: Math.abs(delta),
+      trend: baseGeometryTrend(small.mean, middle.mean, large.mean, group.termMeta),
+      strong,
+    };
+  }).sort((a, b) => {
+    if (a.strong !== b.strong) return a.strong ? -1 : 1;
+    const aScore = Number.isFinite(a.absDelta) ? a.absDelta : -Infinity;
+    const bScore = Number.isFinite(b.absDelta) ? b.absDelta : -Infinity;
+    if (bScore !== aScore) return bScore - aScore;
+    return a.termLabel.localeCompare(b.termLabel);
+  });
+
+  return { filteredRows, rankingRows };
+}
+
+function baseGeometrySelectedTermRows(allowedPidMask) {
+  const bg = state.baseGeometry;
+  const data = bg.scalarData;
+  if (!bg.selectedTermId || !bg.selectedSequenceContext) return [];
+  const indices = data.termIndex.get(bg.selectedTermId) ?? [];
+  const rows = [];
+  for (const rowIndex of indices) {
+    if (!baseGeometryRowPasses(rowIndex, allowedPidMask)) continue;
+    if (data.sequenceContext[rowIndex] !== bg.selectedSequenceContext) continue;
+    rows.push(rowIndex);
+  }
+  return rows;
+}
+
+function baseGeometryTermContextKey(termId, sequenceContext) {
+  return `${termId}|${sequenceContext}`;
+}
+
+function parseBaseGeometryTermContextKey(key) {
+  const [termId, ...contextParts] = String(key ?? "").split("|");
+  return {
+    termId,
+    sequenceContext: contextParts.join("|"),
+  };
+}
+
+function availableBaseGeometryTermContexts(rankingRows) {
+  const seen = new Map();
+  for (const row of rankingRows) {
+    const key = baseGeometryTermContextKey(row.termId, row.sequenceContext);
+    if (!seen.has(key)) {
+      seen.set(key, {
+        id: key,
+        termId: row.termId,
+        sequenceContext: row.sequenceContext,
+        label: row.termLabel,
+        surveyGroup: row.surveyGroup,
+        unit: row.unit,
+      });
+    }
+  }
+  return [...seen.values()].sort((a, b) => (
+    a.label.localeCompare(b.label) || a.sequenceContext.localeCompare(b.sequenceContext)
+  ));
+}
+
+function renderBaseGeometryControls(rankingRows = state.baseGeometry.lastRankingRows) {
+  const bg = state.baseGeometry;
+  renderSingleChoiceGroup("baseGeometryGroup", baseGeometrySurveyGroupOptions(), bg.surveyGroup, (nextId) => {
+    bg.surveyGroup = nextId;
+    renderBaseGeometrySurvey();
+  });
+  renderMultiChoiceGroup("baseGeometryContextGroup", baseGeometryContextOptions(), bg.contexts, (contextId) => {
+    if (bg.contexts.has(contextId) && bg.contexts.size === 1) return;
+    if (bg.contexts.has(contextId)) bg.contexts.delete(contextId);
+    else bg.contexts.add(contextId);
+    renderBaseGeometrySurvey();
+  });
+  renderSingleChoiceGroup("baseGeometryMinObsGroup", BASE_GEOMETRY_MIN_OBS_OPTIONS, bg.minObs, (nextId) => {
+    bg.minObs = nextId;
+    renderBaseGeometrySurvey();
+  });
+  renderSingleChoiceGroup("baseGeometryCoordContextGroup", baseGeometryCoordContextOptions(), bg.coordContext, (nextId) => {
+    bg.coordContext = nextId;
+    renderBaseGeometryCoordinateTable(buildAllowedPidMask().mask);
+  });
+  renderSingleChoiceGroup("baseGeometryCoordBinGroup", baseGeometryBinOptions(), bg.coordBin, (nextId) => {
+    bg.coordBin = nextId;
+    renderBaseGeometryCoordinateTable(buildAllowedPidMask().mask);
+  });
+
+  const termSelect = el("baseGeometryTermSelect");
+  const terms = availableBaseGeometryTermContexts(rankingRows);
+  const selectedKey = baseGeometryTermContextKey(bg.selectedTermId, bg.selectedSequenceContext);
+  termSelect.innerHTML = "";
+  for (const term of terms) {
+    const option = document.createElement("option");
+    option.value = term.id;
+    option.textContent = `${term.label} / ${term.sequenceContext} (${unitLabel(term.unit)})`;
+    option.selected = term.id === selectedKey;
+    termSelect.appendChild(option);
+  }
+  termSelect.disabled = !terms.length;
+  termSelect.onchange = (event) => {
+    const parsed = parseBaseGeometryTermContextKey(event.target.value);
+    bg.selectedTermId = parsed.termId || null;
+    bg.selectedSequenceContext = parsed.sequenceContext || null;
+    renderBaseGeometrySelectedTermPlot(buildAllowedPidMask().mask);
+    renderBaseGeometryRankingTable(bg.lastRankingRows);
+  };
+}
+
+function renderBaseGeometryRankingTable(rankingRows) {
+  const tbody = el("baseGeometryRankingBody");
+  const rows = rankingRows.slice(0, 80);
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8">No base-geometry rows pass the current filters.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map((row) => `
+    <tr class="${
+      row.termId === state.baseGeometry.selectedTermId
+        && row.sequenceContext === state.baseGeometry.selectedSequenceContext
+        ? "active-row"
+        : ""
+    }" data-term-id="${escapeHtml(row.termId)}" data-sequence-context="${escapeHtml(row.sequenceContext)}">
+      <td>${escapeHtml(row.termLabel)} <span class="meta">${escapeHtml(unitLabel(row.unit))}</span></td>
+      <td>${escapeHtml(row.sequenceContext)}</td>
+      <td>${formatInt(row.small.n)} / ${formatInt(row.middle.n)} / ${formatInt(row.large.n)}</td>
+      <td>${displayBaseGeometryValue(row.small.mean, row.termMeta, 3)}</td>
+      <td>${displayBaseGeometryValue(row.middle.mean, row.termMeta, 3)}</td>
+      <td>${displayBaseGeometryValue(row.large.mean, row.termMeta, 3)}</td>
+      <td>${Number.isFinite(row.delta) ? row.delta.toFixed(4) : "-"}${row.strong ? "" : " *"}</td>
+      <td>${escapeHtml(row.trend || "-")}</td>
+    </tr>
+  `).join("");
+  for (const tr of tbody.querySelectorAll("tr[data-term-id]")) {
+    tr.addEventListener("click", () => {
+      state.baseGeometry.selectedTermId = tr.dataset.termId;
+      state.baseGeometry.selectedSequenceContext = tr.dataset.sequenceContext;
+      renderBaseGeometryControls(state.baseGeometry.lastRankingRows);
+      renderBaseGeometryRankingTable(state.baseGeometry.lastRankingRows);
+      renderBaseGeometrySelectedTermPlot(buildAllowedPidMask().mask);
+    });
+  }
+}
+
+function linearRangeFromValues(values) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 1];
+  if (Math.abs(max - min) < 1e-9) {
+    const pad = Math.max(0.5, Math.abs(max) * 0.1);
+    return [min - pad, max + pad];
+  }
+  const pad = Math.max((max - min) * 0.08, 0.2);
+  return [min - pad, max + pad];
+}
+
+function histogramForValues(values, range, bins) {
+  const counts = new Float64Array(bins);
+  const span = range[1] - range[0];
+  if (!(span > 0)) return counts;
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue;
+    let bin = Math.floor(((value - range[0]) / span) * bins);
+    if (bin < 0) bin = 0;
+    if (bin >= bins) bin = bins - 1;
+    counts[bin] += 1;
+  }
+  return counts;
+}
+
+function normalizedHistogram(values, range, bins) {
+  const raw = histogramForValues(values, range, bins);
+  const smoothed = smoothLinearCounts([...raw], Number.parseFloat(state.smoothingSigma));
+  const total = smoothed.reduce((sum, value) => sum + value, 0);
+  const binWidth = (range[1] - range[0]) / bins;
+  const y = smoothed.map((value) => {
+    const probability = total ? value / total : 0;
+    return state.displayScale === "density" && binWidth > 0 ? probability / binWidth : probability;
+  });
+  const x = y.map((_, index) => range[0] + (index + 0.5) * binWidth);
+  return { x, y };
+}
+
+function buildBaseGeometryCircularPlotData(valuesByBin, termMeta, bins) {
+  const accumulators = Object.fromEntries(
+    BASE_GEOMETRY_OPENING_BINS.map((bin) => [bin, initAccumulator(termMeta, bins)]),
+  );
+  const aggregateCounts = new Uint32Array(bins);
+  for (const bin of BASE_GEOMETRY_OPENING_BINS) {
+    for (const value of valuesByBin[bin]) {
+      addValueToAccumulator(accumulators[bin], termMeta, value, 0, null);
+    }
+    const counts = accumulators[bin].rawCounts;
+    for (let index = 0; index < bins; index += 1) aggregateCounts[index] += counts[index];
+  }
+  const seamChoice = circularDisplayConfig(aggregateCounts, termMeta);
+  return {
+    displayCut: seamChoice.displayCut,
+    shiftBins: seamChoice.shiftBins,
+    axisMode: seamChoice.axisMode,
+    bins: Object.fromEntries(
+      BASE_GEOMETRY_OPENING_BINS.map((bin) => [
+        bin,
+        finalizeAccumulator(
+          accumulators[bin],
+          termMeta,
+          [0, termMeta.period ?? 360],
+          seamChoice.displayCut,
+          seamChoice.shiftBins,
+          seamChoice.axisMode,
+        ),
+      ]),
+    ),
+  };
+}
+
+function renderBaseGeometrySelectedTermPlot(allowedPidMask) {
+  const bg = state.baseGeometry;
+  const data = bg.scalarData;
+  const plotNode = el("baseGeometryPlot");
+  const rows = baseGeometrySelectedTermRows(allowedPidMask);
+  const plottedRows = rows.filter((rowIndex) => BASE_GEOMETRY_OPENING_BINS.includes(data.openingBin[rowIndex]));
+  el("baseGeometrySelectedRows").textContent = formatInt(plottedRows.length);
+
+  if (!rows.length) {
+    if (plotNode.data) Plotly.purge(plotNode);
+    plotNode.innerHTML = `<div class="empty-state">No selected-term observations match the current filters.</div>`;
+    return;
+  }
+
+  const valuesByBin = Object.fromEntries(BASE_GEOMETRY_OPENING_BINS.map((bin) => [bin, []]));
+  for (const rowIndex of rows) {
+    const bin = data.openingBin[rowIndex];
+    if (!valuesByBin[bin]) continue;
+    valuesByBin[bin].push(data.value[rowIndex]);
+  }
+  const allValues = BASE_GEOMETRY_OPENING_BINS.flatMap((bin) => valuesByBin[bin]);
+  const exemplar = rows.length ? rows[0] : null;
+  const termLabel = exemplar !== null ? data.termLabel[exemplar] : "Selected term";
+  const termContextLabel = bg.selectedSequenceContext ? `${termLabel} / ${bg.selectedSequenceContext}` : termLabel;
+  const unit = exemplar !== null ? unitLabel(data.unit[exemplar]) : "";
+  const termMeta = baseGeometryTermMeta(bg.selectedTermId);
+  const bins = currentBinCount(termMeta);
+  const circularPlot = termMeta.isCircular ? buildBaseGeometryCircularPlotData(valuesByBin, termMeta, bins) : null;
+  const range = termMeta.isCircular ? [0, termMeta.period ?? 360] : linearRangeFromValues(allValues);
+  const traces = BASE_GEOMETRY_OPENING_BINS
+    .filter((bin) => valuesByBin[bin].length)
+    .map((bin) => {
+      const hist = termMeta.isCircular
+        ? circularPlot.bins[bin]
+        : normalizedHistogram(valuesByBin[bin], range, bins);
+      const meta = BASE_GEOMETRY_BIN_META[bin];
+      const trace = {
+        x: hist.x,
+        y: hist.y,
+        type: "scatter",
+        mode: "lines",
+        line: { width: 2.5, color: meta.color },
+        name: `${meta.label} (${formatInt(valuesByBin[bin].length)})`,
+        hovertemplate: `${termContextLabel}: %{x:.3f}<br>${currentDisplayScaleLabel()}: %{y:.4g}<extra>${meta.label}</extra>`,
+      };
+      if (termMeta.isCircular) {
+        if (circularPlot.axisMode === "signed_180") {
+          trace.customdata = hist.hoverAngles.map((angle, index) => [hist.hoverDisplayAngles[index], angle]);
+          trace.hovertemplate = `View %{customdata[0]:.1f}<br>Angle %{customdata[1]:.1f}<br>${currentDisplayScaleLabel()}: %{y:.4g}<extra>${meta.label}</extra>`;
+        } else {
+          trace.customdata = hist.hoverAngles;
+          trace.hovertemplate = `Angle %{customdata:.1f}<br>${currentDisplayScaleLabel()}: %{y:.4g}<extra>${meta.label}</extra>`;
+        }
+      }
+      if (state.traceStyle === "filled") {
+        trace.fill = "tozeroy";
+        trace.fillcolor = `${meta.color}22`;
+      }
+      return trace;
+    });
+
+  if (!traces.length) {
+    if (plotNode.data) Plotly.purge(plotNode);
+    plotNode.innerHTML = `<div class="empty-state">The selected term has no small/middle/large opening-bin observations.</div>`;
+    return;
+  }
+
+  const layout = {
+    margin: { l: 64, r: 22, t: 28, b: 72, pad: 4 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(255,253,247,0.65)",
+    xaxis: {
+      title: { text: unit ? `${termContextLabel} (${unit})` : termContextLabel, standoff: 12 },
+      range,
+      automargin: true,
+      zeroline: false,
+      ...(termMeta.isCircular ? buildCircularTickSpec(termMeta.period ?? 360, circularPlot.displayCut, false, circularPlot.axisMode) : {}),
+    },
+    yaxis: {
+      title: currentDisplayScaleLabel(),
+      automargin: true,
+      zeroline: false,
+      rangemode: "tozero",
+    },
+    legend: { orientation: "h", y: 1.16 },
+  };
+  const config = { responsive: true, displayModeBar: false };
+  const canReact = Array.isArray(plotNode.data);
+  if (!canReact) plotNode.innerHTML = "";
+  if (canReact) Plotly.react("baseGeometryPlot", traces, layout, config);
+  else Plotly.newPlot("baseGeometryPlot", traces, layout, config);
+}
+
+function renderBaseGeometryCoordinateTable(allowedPidMask) {
+  const bg = state.baseGeometry;
+  const data = bg.coordData;
+  const groups = new Map();
+  for (let rowIndex = 0; rowIndex < data.rowCount; rowIndex += 1) {
+    if (!baseGeometryCoordRowPasses(rowIndex, allowedPidMask)) continue;
+    const key = data.atomLabel[rowIndex];
+    if (!groups.has(key)) {
+      groups.set(key, {
+        atomLabel: key,
+        atomBase: data.atomBase[rowIndex],
+        atomName: data.atomName[rowIndex],
+        n: 0,
+        sumX: 0,
+        sumY: 0,
+        sumZ: 0,
+        sumX2: 0,
+        sumY2: 0,
+        sumZ2: 0,
+        pairs: new Set(),
+        pdbs: new Set(),
+      });
+    }
+    const group = groups.get(key);
+    const x = data.x[rowIndex];
+    const y = data.y[rowIndex];
+    const z = data.z[rowIndex];
+    group.n += 1;
+    group.sumX += x;
+    group.sumY += y;
+    group.sumZ += z;
+    group.sumX2 += x * x;
+    group.sumY2 += y * y;
+    group.sumZ2 += z * z;
+    group.pairs.add(`${data.pid[rowIndex]}|${data.pairSiteLabel[rowIndex]}`);
+    group.pdbs.add(data.pdbId[rowIndex]);
+  }
+
+  const rows = [...groups.values()].map((group) => {
+    const meanX = group.sumX / group.n;
+    const meanY = group.sumY / group.n;
+    const meanZ = group.sumZ / group.n;
+    const stdX = Math.sqrt(Math.max(0, (group.sumX2 / group.n) - meanX * meanX));
+    const stdY = Math.sqrt(Math.max(0, (group.sumY2 / group.n) - meanY * meanY));
+    const stdZ = Math.sqrt(Math.max(0, (group.sumZ2 / group.n) - meanZ * meanZ));
+    return {
+      ...group,
+      meanX,
+      meanY,
+      meanZ,
+      rmsSpread: Math.sqrt(stdX * stdX + stdY * stdY + stdZ * stdZ),
+    };
+  }).sort((a, b) => {
+    const roleA = a.atomLabel.startsWith("anchor") ? 0 : 1;
+    const roleB = b.atomLabel.startsWith("anchor") ? 0 : 1;
+    if (roleA !== roleB) return roleA - roleB;
+    return a.atomLabel.localeCompare(b.atomLabel);
+  });
+
+  const tbody = el("baseGeometryCoordBody");
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8">No coordinate rows pass the current filters.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.atomLabel)}</td>
+      <td>${formatInt(row.n)}</td>
+      <td>${formatInt(row.pairs.size)}</td>
+      <td>${formatInt(row.pdbs.size)}</td>
+      <td>${row.meanX.toFixed(4)}</td>
+      <td>${row.meanY.toFixed(4)}</td>
+      <td>${row.meanZ.toFixed(4)}</td>
+      <td>${row.rmsSpread.toFixed(4)}</td>
+    </tr>
+  `).join("");
+}
+
+function renderBaseGeometrySurvey() {
+  if (!state.baseGeometry.loaded) return;
+  const allowed = buildAllowedPidMask();
+  const { filteredRows, rankingRows } = computeBaseGeometryRanking(allowed.mask);
+  const bg = state.baseGeometry;
+  bg.lastRankingRows = rankingRows;
+  const terms = availableBaseGeometryTermContexts(rankingRows);
+  const selectedKey = baseGeometryTermContextKey(bg.selectedTermId, bg.selectedSequenceContext);
+  if (!bg.selectedTermId || !bg.selectedSequenceContext || !terms.some((term) => term.id === selectedKey)) {
+    const first = rankingRows[0] ?? null;
+    bg.selectedTermId = first?.termId ?? null;
+    bg.selectedSequenceContext = first?.sequenceContext ?? null;
+  }
+  el("baseGeometryScalarRows").textContent = formatInt(filteredRows);
+  el("baseGeometryRankRows").textContent = formatInt(rankingRows.length);
+  renderBaseGeometryControls(rankingRows);
+  renderBaseGeometryRankingTable(rankingRows);
+  renderBaseGeometrySelectedTermPlot(allowed.mask);
+  renderBaseGeometryCoordinateTable(allowed.mask);
+}
+
+function refreshBaseGeometryIfLoaded() {
+  if (!state.baseGeometry.loaded) return;
+  renderBaseGeometrySurvey();
+}
+
+async function loadBaseGeometrySurvey() {
+  const bg = state.baseGeometry;
+  if (bg.loading) return;
+  if (bg.loaded) {
+    renderBaseGeometrySurvey();
+    return;
+  }
+  bg.loading = true;
+  const button = el("baseGeometryLoad");
+  button.disabled = true;
+  button.textContent = "Loading base geometry...";
+  try {
+    const manifest = await fetchJson(BASE_GEOMETRY_MANIFEST_PATH);
+    const assetRoot = "./assets/pure_dna/base_geometry/";
+    const [termsConfig, scalarText, coordText] = await Promise.all([
+      fetchJson(`${assetRoot}${pathFromRelative(manifest.files.terms.file)}`),
+      fetchTextMaybeGzip(`${assetRoot}${pathFromRelative(manifest.files.scalar_terms.file)}`),
+      fetchTextMaybeGzip(`${assetRoot}${pathFromRelative(manifest.files.wc_local_coordinates.file)}`),
+    ]);
+    bg.manifest = manifest;
+    bg.termsConfig = termsConfig;
+    bg.termMetaById = buildBaseGeometryTermMetaMap(termsConfig);
+    bg.scalarData = parseBaseGeometryScalarTable(scalarText);
+    bg.coordData = parseBaseGeometryCoordinateTable(coordText);
+    bg.contexts = new Set(manifest.defaults?.sequence_contexts ?? manifest.sequence_contexts ?? ["A-T", "C-G", "G-C", "T-A"]);
+    bg.surveyGroup = manifest.defaults?.survey_group ?? "all";
+    bg.minObs = String(manifest.defaults?.min_observations_per_bin ?? "5");
+    bg.coordContext = manifest.local_coordinate_contexts?.[0] ?? "C-G";
+    bg.coordBin = "middle";
+    bg.loaded = true;
+    el("baseGeometryBody").hidden = false;
+    button.textContent = "Refresh base geometry survey";
+    renderBaseGeometrySurvey();
+  } catch (error) {
+    console.error(error);
+    const body = el("baseGeometryBody");
+    body.hidden = false;
+    body.innerHTML = `<div class="empty-state">Could not load base geometry survey: ${escapeHtml(error?.message || "Unknown error")}</div>`;
+    button.textContent = "Retry base geometry survey";
+  } finally {
+    bg.loading = false;
+    button.disabled = false;
+  }
+}
+
+function bindBaseGeometrySurvey() {
+  const button = el("baseGeometryLoad");
+  if (!button) return;
+  button.addEventListener("click", () => {
+    loadBaseGeometrySurvey();
+  });
 }
 
 async function boot() {
@@ -2955,6 +3752,7 @@ async function boot() {
   renderOverviewCards();
   bindUniverseDrawer();
   bindFilteredDrawer();
+  bindBaseGeometrySurvey();
   await renderFiltersAndPlot();
 }
 

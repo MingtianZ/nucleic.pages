@@ -443,6 +443,10 @@ select {
   overflow: auto;
 }
 
+.compact-table-shell {
+  max-height: 420px;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -470,6 +474,11 @@ select {
 
 .data-table tbody tr:hover {
   background: rgba(23, 74, 126, 0.05);
+}
+
+.data-table tbody tr.active-row {
+  background: rgba(23, 74, 126, 0.09);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .pdb-link {
@@ -576,6 +585,15 @@ select {
   padding: 12px 12px 8px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   overflow: hidden;
+}
+
+.base-geometry-plot {
+  min-height: 380px;
+  margin-top: 10px;
+}
+
+.base-geometry-term-controls {
+  margin-top: 14px;
 }
 
 .empty-state {
