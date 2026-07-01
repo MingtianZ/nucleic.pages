@@ -3107,6 +3107,17 @@ function baseGeometryBinOptions() {
   }));
 }
 
+function normalizeBaseGeometryCoordinateSelection() {
+  const bg = state.baseGeometry;
+  const contextIds = baseGeometryCoordContextOptions().map((option) => option.id);
+  if (!contextIds.includes(bg.coordContext)) {
+    bg.coordContext = contextIds[0] ?? "";
+  }
+  if (!BASE_GEOMETRY_OPENING_BINS.includes(bg.coordBin)) {
+    bg.coordBin = BASE_GEOMETRY_OPENING_BINS[0] ?? "";
+  }
+}
+
 function baseGeometryRowPasses(rowIndex, allowedPidMask) {
   const bg = state.baseGeometry;
   const data = bg.scalarData;
@@ -3320,6 +3331,7 @@ function availableBaseGeometryTermContexts(rankingRows) {
 
 function renderBaseGeometryControls(rankingRows = state.baseGeometry.lastRankingRows) {
   const bg = state.baseGeometry;
+  normalizeBaseGeometryCoordinateSelection();
   renderSingleChoiceGroup("baseGeometryGroup", baseGeometrySurveyGroupOptions(), bg.surveyGroup, (nextId) => {
     bg.surveyGroup = nextId;
     renderBaseGeometrySurvey();
@@ -3336,10 +3348,12 @@ function renderBaseGeometryControls(rankingRows = state.baseGeometry.lastRanking
   });
   renderSingleChoiceGroup("baseGeometryCoordContextGroup", baseGeometryCoordContextOptions(), bg.coordContext, (nextId) => {
     bg.coordContext = nextId;
+    renderBaseGeometryControls(bg.lastRankingRows);
     renderBaseGeometryCoordinateTable(buildAllowedPidMask().mask);
   });
   renderSingleChoiceGroup("baseGeometryCoordBinGroup", baseGeometryBinOptions(), bg.coordBin, (nextId) => {
     bg.coordBin = nextId;
+    renderBaseGeometryControls(bg.lastRankingRows);
     renderBaseGeometryCoordinateTable(buildAllowedPidMask().mask);
   });
 
@@ -3571,6 +3585,7 @@ function renderBaseGeometrySelectedTermPlot(allowedPidMask) {
 
 function renderBaseGeometryCoordinateTable(allowedPidMask) {
   const bg = state.baseGeometry;
+  normalizeBaseGeometryCoordinateSelection();
   const data = bg.coordData;
   const groups = new Map();
   for (let rowIndex = 0; rowIndex < data.rowCount; rowIndex += 1) {
